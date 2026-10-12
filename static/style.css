@@ -94,3 +94,8 @@ footer{color:#7184a7}.toast{background:#101a31;border:1px solid rgba(0,234,255,.
 .withdraw-gold{border:1px solid #ffe29a!important;border-radius:15px!important;background:linear-gradient(110deg,#fff0a3,#ffca3a 50%,#e99b17)!important;color:#362200!important;font:900 16px Manrope!important;box-shadow:0 0 22px #ffbf3855!important;min-height:56px}
 .profile-card{padding:20px 0 10px}.profile-card .avatar{background:linear-gradient(135deg,#10d9f5,#7352ff);box-shadow:0 0 18px #00cfff33}
 @media(max-width:360px){.neon-tabs .tab{gap:3px;padding:10px 2px}.neon-tabs .tab span{font-size:10px}}
+
+/* Game UX improvements */
+#maze-new-game{margin-top:10px;border-color:#b58b2c;color:#ffe39a}
+.incorrect-dialog{border-color:#f26b7b;box-shadow:0 0 22px #ff456455,0 0 48px #8b5cff22}
+.incorrect-dialog .reward-coin{filter:drop-shadow(0 0 10px #ff596a88)}

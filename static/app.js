@@ -31,8 +31,6 @@ function render(){
   $("profile-hero-balance").textContent=Number(state.balance).toLocaleString("en-IN");
   $("profile-hero-rupees").textContent=`≈ ₹${(state.balance/100).toFixed(2)} available`;
   $("profile-hero-ads-count").textContent=`${state.ads_today}/25 ads today`;
-  $("profile-balance").textContent=Number(state.balance).toLocaleString("en-IN")+" coins";
-  $("profile-ads").textContent=`${state.ads_today}/25`;
   if(state.user){
     const name=[state.user.first_name,state.user.last_name].filter(Boolean).join(" ")||"Telegram User";
     $("profile-name").textContent=name;
@@ -123,14 +121,14 @@ loadReferrals();
 document.querySelectorAll("[data-game]").forEach(btn=>btn.addEventListener("click",()=>{
   document.querySelectorAll(".game-panel").forEach(p=>p.hidden=true);
   const panel=$("game-"+btn.dataset.game); if(panel) panel.hidden=false;
-  if(btn.dataset.game==="maze"){const cells=[];mazeMap.forEach((row,r)=>[...row].forEach((ch,c)=>{if(ch==="."||ch==="S")cells.push({r,c})}));ball=cells[Math.floor(Math.random()*cells.length)];mazeRewardPrompted=false;$("maze-feedback").textContent="";drawMaze();}
+  if(btn.dataset.game==="maze")startNewMaze();
   if(btn.dataset.game==="village") newVillage();
 }));
 document.querySelectorAll("[data-close-game]").forEach(btn=>btn.addEventListener("click",()=>{
   btn.closest(".game-panel").hidden=true;
 }));
 
-let mathAnswer=0, mathScore=0, mathRound=0, mathRewardPrompted=false;
+let mathAnswer=0, mathScore=0, mathRound=0, mathRewardPrompted=false, mathAnswerCount=0, pendingRetry=null;
 function nextMath(){
   const op=["+","−","×","÷"][Math.floor(Math.random()*4)];
   let a,b;
@@ -144,18 +142,29 @@ function nextMath(){
   arr.sort(()=>Math.random()-.5).forEach(n=>{
     const b=document.createElement("button");b.className="answer-button";b.textContent=n;
     b.addEventListener("click",()=>{
-      if(n===mathAnswer){mathScore++;$("math-feedback").textContent=`Correct! Score: ${mathScore}`;}
-      else $("math-feedback").textContent=`Not quite — correct answer: ${mathAnswer}. Score: ${mathScore}`;
-      mathRound++; if(mathRound<10) nextMath(); else {$("math-question").textContent=`Quiz complete! Final score: ${mathScore}/10`; $("math-answers").innerHTML=""; if(mathScore>=7&&!mathRewardPrompted){mathRewardPrompted=true;openGameReward("math");}}
+      if(n!==mathAnswer){showIncorrect("math",()=>{},()=>advanceMath(false));return;}
+      mathScore++;mathAnswerCount++;$("math-feedback").textContent=`Correct! Score: ${mathScore}`;
+      advanceMath(true);
     });$("math-answers").append(b);
   });
 }
-$("math-start")?.addEventListener("click",()=>{mathScore=0;mathRound=0;$("math-feedback").textContent="";nextMath()});
+function advanceMath(correct){
+  mathRound++;
+  if(mathAnswerCount>0 && mathAnswerCount%5===0){openGameReward("math");}
+  if(mathRound>=10){$("math-question").textContent=`Quiz complete! Final score: ${mathScore}/10`;$("math-answers").innerHTML="";return;}
+  nextMath();
+}
+$("math-start")?.addEventListener("click",()=>{mathScore=0;mathRound=0;mathAnswerCount=0;mathRewardPrompted=false;$("math-feedback").textContent="";nextMath()});
 
 // Small fixed maze; # are walls, S is start, E is exit.
-const mazeMap=["#########","#S#.....#","#.#.###.#","#...#...#","###.#.#E#","#.....#.#","#########"];
+const mazeMap=["#########","#S#.....#","#.#.###.#","#...#...#","###.#.#.#","#.....#.E","#########"];
 let ball={r:1,c:1};
-let mazeRewardPrompted=false;
+let mazeRewardPrompted=false, mazeWon=false;
+function startNewMaze(){
+  const cells=[];mazeMap.forEach((row,r)=>[...row].forEach((ch,c)=>{if(ch==="."||ch==="S")cells.push({r,c})}));
+  ball=cells[Math.floor(Math.random()*cells.length)];mazeRewardPrompted=false;mazeWon=false;
+  $("maze-feedback").textContent="Find the exit on the outer boundary!";drawMaze();
+}
 function drawMaze(){
   const board=$("maze-board"); if(!board)return;board.innerHTML="";
   mazeMap.forEach((row,r)=>[...row].forEach((cell,c)=>{
@@ -166,12 +175,13 @@ function drawMaze(){
   }));
 }
 function moveBall(dir){
+  if(mazeWon)return;
   const delta={up:[-1,0],down:[1,0],left:[0,-1],right:[0,1]}[dir];if(!delta)return;
   const r=ball.r+delta[0],c=ball.c+delta[1];
   if(!mazeMap[r]||mazeMap[r][c]==="#"||!mazeMap[r][c])return;
   ball={r,c};drawMaze();
   if(mazeMap[r][c]==="E"){
-    $("maze-feedback").textContent="You escaped the maze! 🎉";
+    mazeWon=true;$("maze-feedback").textContent="You escaped the maze! 🎉";
     if(!mazeRewardPrompted){mazeRewardPrompted=true;openGameReward("maze");}
   }
 }
@@ -203,8 +213,20 @@ $("maze-claim")?.addEventListener("click",async()=>{
     btn.disabled=false;btn.textContent="Try claim again";
   }
 });
+$("maze-new-game")?.addEventListener("click",startNewMaze);
 document.querySelectorAll("[data-move]").forEach(b=>b.addEventListener("click",()=>moveBall(b.dataset.move)));
 document.addEventListener("keydown",e=>{if(!$("game-maze")?.hidden){const d={ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right"}[e.key];if(d){e.preventDefault();moveBall(d)}}});
+
+
+let incorrectRetryAction=null, incorrectCancelAction=null;
+function showIncorrect(game,retry,cancel){
+  incorrectRetryAction=retry;incorrectCancelAction=cancel;
+  const m=$("incorrect-modal");if(!m)return;
+  $("incorrect-message").textContent=game==="math"?"Wrong answer. Try this question again?":"Wrong object. Try choosing again?";
+  m.hidden=false;
+}
+$("incorrect-retry")?.addEventListener("click",()=>{ $("incorrect-modal").hidden=true; if(incorrectRetryAction)incorrectRetryAction(); });
+$("incorrect-cancel")?.addEventListener("click",()=>{ $("incorrect-modal").hidden=true; if(incorrectCancelAction)incorrectCancelAction(); });
 
 // Village hidden-object game: tap the matching tiny objects.
 const villageObjectSets=[
@@ -223,7 +245,7 @@ function newVillage(){
  const slots=new Set();while(slots.size<set.count)slots.add(Math.floor(Math.random()*items.length));
  slots.forEach(i=>items[i]=set.emoji);items.sort(()=>Math.random()-.5).forEach(emoji=>{
   const item=document.createElement("button");item.className="village-object";item.textContent=emoji;item.setAttribute("aria-label","Village object");
-  item.addEventListener("click",()=>{if(item.disabled)return;if(emoji===villageTarget){item.disabled=true;item.classList.add("found");villageFound++;$("village-feedback").textContent=`Found ${villageFound}/${villageNeed}!`;if(villageFound===villageNeed){$("village-feedback").textContent="All objects found! 🎉";openGameReward("village");}}else $("village-feedback").textContent="Not that one — keep searching!";});
+  item.addEventListener("click",()=>{if(item.disabled)return;if(emoji===villageTarget){item.disabled=true;item.classList.add("found");villageFound++;$("village-feedback").textContent=`Found ${villageFound}/${villageNeed}!`;if(villageFound===villageNeed){$("village-feedback").textContent="All objects found! 🎉";openGameReward("village");}}else showIncorrect("village",()=>{item.disabled=false;item.classList.remove("found");},()=>{$("village-feedback").textContent="Keep searching for the remaining objects.";});});
   scene.append(item);
  });
 }
