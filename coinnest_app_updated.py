@@ -6,7 +6,7 @@ from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
 DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "coinnest.db"))
-BOT_TOKEN = "8912412112:AAHGCG7DOi2Ak798hp45CejBj4yUPEwcSQM"
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "CoinNest_bot").strip().lstrip("@")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "").strip()
 DEMO_MODE = os.environ.get("DEMO_MODE", "1") == "1"
@@ -203,8 +203,31 @@ def me():
 @app.post("/api/claim-ad")
 @require_user
 def claim_ad():
-    # Deliberately disabled until a real ad provider callback/signature is integrated.
-    return jsonify({"error": "Ad rewards are disabled until the ad provider's server-side verification is connected."}), 501
+    """Credit one reward after the AdsGram rewarded SDK reports completion.
+
+    Note: this uses the standard client-side AdsGram callback. It is not equivalent
+    to a signed server-to-server proof, so use this for the standard SDK flow and
+    keep strict limits. Never expose BOT_TOKEN in the frontend.
+    """
+    user = request.user_data
+    today = time.strftime("%Y-%m-%d", time.localtime())
+    now = int(time.time())
+    with db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT COUNT(*) AS n FROM ad_claims WHERE telegram_id=? AND day=?",
+                           (user["telegram_id"], today)).fetchone()
+        count = int(row["n"] if row else 0)
+        if count >= DAILY_AD_LIMIT:
+            conn.rollback()
+            return jsonify({"error": f"Daily ad limit reached ({DAILY_AD_LIMIT} ads). Come back tomorrow."}), 429
+        conn.execute("INSERT INTO ad_claims(telegram_id, day, created_at) VALUES(?,?,?)",
+                     (user["telegram_id"], today, now))
+        conn.execute("UPDATE users SET balance=balance+? WHERE telegram_id=?",
+                     (COINS_PER_AD, user["telegram_id"]))
+        conn.commit()
+    return jsonify({"ok": True, "reward": COINS_PER_AD,
+                    "message": f"Success! {COINS_PER_AD} coins added.",
+                    "ads_today": count + 1, "daily_limit": DAILY_AD_LIMIT})
 
 @app.post("/api/withdraw")
 @require_user
