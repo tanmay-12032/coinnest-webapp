@@ -45,7 +45,7 @@ document.querySelectorAll(".tab").forEach(btn=>btn.addEventListener("click",()=>
   document.querySelectorAll(".panel").forEach(x=>x.classList.toggle("active",x.id==="panel-"+btn.dataset.tab));
 }));
 // Replace this with the numeric Reward block ID from your AdsGram publisher dashboard.
-const ADSGRAM_BLOCK_ID = "YOUR_ADSGRAM_BLOCK_ID";
+const ADSGRAM_BLOCK_ID = "task-53503";
 let adController = null;
 try {
   if (window.Adsgram && ADSGRAM_BLOCK_ID !== "YOUR_ADSGRAM_BLOCK_ID") {
@@ -55,7 +55,7 @@ try {
 
 $("watch-btn").addEventListener("click", async () => {
   const btn = $("watch-btn");
-  if (ADSGRAM_BLOCK_ID === "YOUR_ADSGRAM_BLOCK_ID") {
+  if (ADSGRAM_BLOCK_ID === "task-53503") {
     toast("Add your AdsGram Reward Block ID in static/app.js first.");
     return;
   }
