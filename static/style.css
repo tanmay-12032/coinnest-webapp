@@ -24,3 +24,42 @@ body{background:radial-gradient(ellipse at 15% 10%,rgba(0,225,255,.12),transpare
 input{background:#080d1b;border-color:rgba(105,210,255,.22);color:#f3fbff}input:focus{border-color:#53efff;box-shadow:0 0 0 3px rgba(0,234,255,.1)}
 .helper,.profile-card p{color:#70f3ff}.result{background:rgba(56,247,196,.1);color:#75ffd8}.result.error{background:rgba(255,90,110,.1);color:#ff9aa8}
 footer{color:#7184a7}.toast{background:#101a31;border:1px solid rgba(0,234,255,.3);box-shadow:0 0 22px rgba(0,234,255,.1)}
+
+
+/* Neon games + referral page */
+.games-heading{margin-top:24px}
+.games-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.game-card{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:7px;padding:15px;border-radius:17px;border:1px solid #2d4266;background:linear-gradient(145deg,#111d31,#101322);color:#eef7ff;box-shadow:inset 0 0 18px #19d9ff08,0 0 16px #6c4dff12}
+.game-card:active{transform:scale(.98)}
+.game-card.wide{grid-column:1/-1}
+.game-emoji{font-size:25px;filter:drop-shadow(0 0 8px #2be7ff66)}
+.game-card b{font-size:13px}.game-card small{font-size:10px;color:#9baed0}
+.game-panel{margin:14px 0;padding:15px;border:1px solid #365174;border-radius:18px;background:linear-gradient(145deg,#101a2c,#121124);box-shadow:0 0 22px #00d9ff12}
+.game-panel[hidden]{display:none}
+.game-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.game-top h3{font:800 16px Manrope;margin:0}
+.secondary{border:1px solid #375271;background:#17243b;color:#bdefff;padding:9px 12px;border-radius:10px;font-weight:700}
+.game-panel p{font-size:12px;color:#b3c2dc;line-height:1.5}
+.answer-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.answer-button{padding:13px;border-radius:12px;background:#151e34;border:1px solid #355579;color:#70eaff;font-weight:800;font-size:16px}
+.game-feedback{min-height:18px;color:#70f4c8!important}
+.maze-board{display:grid;grid-template-columns:repeat(9,1fr);gap:3px;max-width:300px;margin:14px auto}
+.maze-cell{aspect-ratio:1;border-radius:4px;display:grid;place-items:center;font-size:15px;background:#101a2c}
+.maze-cell.wall{background:#35496d;box-shadow:inset 0 0 5px #17213a}
+.maze-cell.path{border:1px solid #263852}
+.maze-cell.ball{background:#0d3144;box-shadow:0 0 10px #35dfff77}
+.maze-controls{text-align:center}.maze-controls button{width:48px;height:42px;margin:3px;border-radius:12px;border:1px solid #365778;background:#15243a;color:#62e9ff;font-size:20px}
+.village-target{padding:10px;border-radius:10px;background:#14233a;color:#8eeaff!important}
+.village-scene{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;padding:10px;border:1px solid #4b604f;border-radius:13px;background:linear-gradient(145deg,#263f35,#6b6341 45%,#344a3b);box-shadow:inset 0 0 25px #0b1118}
+.village-object{min-width:0;aspect-ratio:1;border:1px solid #ffffff22;border-radius:8px;background:#15251b88;font-size:clamp(16px,5vw,24px);padding:2px}
+.village-object.found{opacity:.3;border-color:#70f4c8;box-shadow:0 0 8px #70f4c866}
+.village-object:disabled{cursor:default}
+.ref-hero{padding:18px;border-radius:18px;border:1px solid #4a4b80;background:radial-gradient(circle at 90% 0,#3b7f9a55,transparent 45%),linear-gradient(135deg,#171b35,#121321);display:flex;flex-direction:column;gap:8px;box-shadow:0 0 24px #784dff1a}
+.ref-hero span{font-size:11px;color:#9bb4d3;text-transform:uppercase;letter-spacing:1px}
+.ref-hero strong{font:800 20px Manrope;color:#73eaff;text-shadow:0 0 14px #3bdfff44}
+.ref-hero small{font-size:11px;color:#b0b8d1}
+.ref-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 20px}
+.ref-stats>div{padding:12px 8px;border:1px solid #293c59;border-radius:13px;background:#101827;display:flex;flex-direction:column;gap:7px}
+.ref-stats small{font-size:10px;color:#9eacc8}.ref-stats b{font-size:17px;color:#76edff}
+#ref-link{background:#0e1727;color:#b6efff;border-color:#334c6b}
+@media(max-width:360px){.ref-hero strong{font-size:17px}.village-scene{gap:3px;padding:6px}}
