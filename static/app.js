@@ -45,10 +45,10 @@ document.querySelectorAll(".tab").forEach(btn=>btn.addEventListener("click",()=>
   document.querySelectorAll(".panel").forEach(x=>x.classList.toggle("active",x.id==="panel-"+btn.dataset.tab));
 }));
 // Replace this with the numeric Reward block ID from your AdsGram publisher dashboard.
-const ADSGRAM_BLOCK_ID = "task-53503";
+const ADSGRAM_BLOCK_ID = "53503";
 let adController = null;
 try {
-  if (window.Adsgram && ADSGRAM_BLOCK_ID !== "task-53503") {
+  if (window.Adsgram && ADSGRAM_BLOCK_ID !== "53503") {
     adController = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
   }
 } catch (e) { console.error("AdsGram initialization failed", e); }
