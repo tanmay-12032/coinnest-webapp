@@ -28,6 +28,9 @@ function render(){
   $("balance").textContent=Number(state.balance).toLocaleString("en-IN");
   $("rupee-balance").textContent=`≈ ₹${(state.balance/100).toFixed(2)} available`;
   $("ads-count").textContent=`${state.ads_today}/25 ads today`;
+  $("profile-hero-balance").textContent=Number(state.balance).toLocaleString("en-IN");
+  $("profile-hero-rupees").textContent=`≈ ₹${(state.balance/100).toFixed(2)} available`;
+  $("profile-hero-ads-count").textContent=`${state.ads_today}/25 ads today`;
   $("profile-balance").textContent=Number(state.balance).toLocaleString("en-IN")+" coins";
   $("profile-ads").textContent=`${state.ads_today}/25`;
   if(state.user){
@@ -82,7 +85,7 @@ $("withdraw-form").addEventListener("submit",async e=>{
   e.preventDefault();const btn=$("withdraw-btn"),result=$("withdraw-result");
   btn.disabled=true;btn.textContent="Sending request…";result.hidden=true;result.className="result";
   try{
-    const data=await api("/api/withdraw",{method:"POST",body:JSON.stringify({amount_rupees:$("amount").value,upi_id:$("upi").value.trim()})});
+    const data=await api("/api/withdraw",{method:"POST",body:JSON.stringify({amount_rupees:$("amount").value,upi_id:$("payz-number").value.trim()})});
     result.textContent=data.message;result.hidden=false;$("withdraw-form").reset();$("coin-cost").textContent="Cost: 1,000 coins";await refresh();
   }catch(err){result.textContent=err.message;result.className="result error";result.hidden=false}
   finally{btn.disabled=false;btn.textContent="Request withdrawal"}
@@ -120,18 +123,19 @@ loadReferrals();
 document.querySelectorAll("[data-game]").forEach(btn=>btn.addEventListener("click",()=>{
   document.querySelectorAll(".game-panel").forEach(p=>p.hidden=true);
   const panel=$("game-"+btn.dataset.game); if(panel) panel.hidden=false;
-  if(btn.dataset.game==="maze"){ball={r:1,c:1};mazeRewardPrompted=false;$("maze-feedback").textContent="";drawMaze();}
+  if(btn.dataset.game==="maze"){const cells=[];mazeMap.forEach((row,r)=>[...row].forEach((ch,c)=>{if(ch==="."||ch==="S")cells.push({r,c})}));ball=cells[Math.floor(Math.random()*cells.length)];mazeRewardPrompted=false;$("maze-feedback").textContent="";drawMaze();}
   if(btn.dataset.game==="village") newVillage();
 }));
 document.querySelectorAll("[data-close-game]").forEach(btn=>btn.addEventListener("click",()=>{
   btn.closest(".game-panel").hidden=true;
 }));
 
-let mathAnswer=0, mathScore=0, mathRound=0;
+let mathAnswer=0, mathScore=0, mathRound=0, mathRewardPrompted=false;
 function nextMath(){
-  const a=Math.floor(Math.random()*20)+1,b=Math.floor(Math.random()*20)+1;
-  const op=Math.random()>.5?"+":"−";
-  mathAnswer=op==="+"?a+b:a-b;
+  const op=["+","−","×","÷"][Math.floor(Math.random()*4)];
+  let a,b;
+  if(op==="÷"){b=Math.floor(Math.random()*9)+2;mathAnswer=Math.floor(Math.random()*12)+1;a=b*mathAnswer;}
+  else {a=Math.floor(Math.random()*30)+1;b=Math.floor(Math.random()*20)+1;mathAnswer=op==="+"?a+b:op==="−"?a-b:a*b;}
   $("math-question").textContent=`${a} ${op} ${b} = ?`;
   const choices=new Set([mathAnswer,mathAnswer+Math.ceil(Math.random()*5),mathAnswer-Math.ceil(Math.random()*5),mathAnswer+Math.ceil(Math.random()*10)]);
   const arr=[...choices].sort(()=>Math.random()-.5).slice(0,4);
@@ -142,7 +146,7 @@ function nextMath(){
     b.addEventListener("click",()=>{
       if(n===mathAnswer){mathScore++;$("math-feedback").textContent=`Correct! Score: ${mathScore}`;}
       else $("math-feedback").textContent=`Not quite — correct answer: ${mathAnswer}. Score: ${mathScore}`;
-      mathRound++; if(mathRound<10) nextMath(); else {$("math-question").textContent=`Quiz complete! Final score: ${mathScore}/10`; $("math-answers").innerHTML="";}
+      mathRound++; if(mathRound<10) nextMath(); else {$("math-question").textContent=`Quiz complete! Final score: ${mathScore}/10`; $("math-answers").innerHTML=""; if(mathScore>=7&&!mathRewardPrompted){mathRewardPrompted=true;openGameReward("math");}}
     });$("math-answers").append(b);
   });
 }
@@ -168,12 +172,15 @@ function moveBall(dir){
   ball={r,c};drawMaze();
   if(mazeMap[r][c]==="E"){
     $("maze-feedback").textContent="You escaped the maze! 🎉";
-    if(!mazeRewardPrompted){mazeRewardPrompted=true;openMazeReward();}
+    if(!mazeRewardPrompted){mazeRewardPrompted=true;openGameReward("maze");}
   }
 }
-function openMazeReward(){
+let currentRewardGame="maze";
+function openGameReward(game){
+  currentRewardGame=game;
   const modal=$("maze-reward-modal");
   if(!modal)return;
+  $("maze-reward-title").textContent="You won 5 coins!";
   $("maze-reward-message").textContent="";
   $("maze-claim").disabled=false;
   $("maze-claim").textContent="Claim 5 coins";
@@ -185,7 +192,7 @@ $("maze-claim")?.addEventListener("click",async()=>{
   const btn=$("maze-claim");
   btn.disabled=true;btn.textContent="Claiming…";
   try{
-    const result=await api("/api/claim-game-reward",{method:"POST",body:JSON.stringify({game:"maze"})});
+    const result=await api("/api/claim-game-reward",{method:"POST",body:JSON.stringify({game:currentRewardGame})});
     $("maze-reward-message").textContent=result.message||"5 coins added to your balance!";
     $("maze-reward-message").classList.add("success");
     await refresh();
@@ -200,18 +207,23 @@ document.querySelectorAll("[data-move]").forEach(b=>b.addEventListener("click",(
 document.addEventListener("keydown",e=>{if(!$("game-maze")?.hidden){const d={ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right"}[e.key];if(d){e.preventDefault();moveBall(d)}}});
 
 // Village hidden-object game: tap the matching tiny objects.
-const villageItems=["🪣","🌻","🍎","🪣","🐓","🪵","🪣","🍎","🌻","🐓","🪵","🍎","🌻","🐓","🪵","🍎","🌻","🐓","🪵","🍎","🌻","🐓","🪵","🍎"];
-let villageFound=0,villageNeed=3;
+const villageObjectSets=[
+ {emoji:"🪣",name:"buckets",count:4,others:["🌻","🍎","🐓","🪵","🧺","🥕","🐈","🪴","🪚"]},
+ {emoji:"🍎",name:"apples",count:5,others:["🪣","🌻","🐓","🪵","🧺","🥕","🐈","🪴","🍐"]},
+ {emoji:"🐓",name:"chickens",count:4,others:["🪣","🌻","🍎","🪵","🧺","🥕","🐈","🪴","🐇"]},
+ {emoji:"🌻",name:"sunflowers",count:5,others:["🪣","🍎","🐓","🪵","🧺","🥕","🐈","🪴","🌷"]}
+];
+let villageFound=0,villageNeed=3,villageTarget="🪣";
 function newVillage(){
-  villageFound=0;villageNeed=3;$("village-target").textContent="🪣 bucket × 3";$("village-feedback").textContent="Tap all 3 buckets hidden in the village.";
-  const scene=$("village-scene");scene.innerHTML="";
-  // shuffle positions so the scene is different each round
-  villageItems.slice().sort(()=>Math.random()-.5).forEach((emoji,i)=>{
-    const item=document.createElement("button");item.className="village-object";item.textContent=emoji;item.setAttribute("aria-label","Village object");
-    item.addEventListener("click",()=>{
-      if(item.disabled)return;
-      if(emoji==="🪣"){item.disabled=true;item.classList.add("found");villageFound++;$("village-feedback").textContent=`Found ${villageFound}/${villageNeed} buckets!`;if(villageFound===villageNeed)$("village-feedback").textContent="All buckets found! Great job 🎉";}
-      else {$("village-feedback").textContent="Not that one — keep searching!";}
-    });scene.append(item);
-  });
+ villageFound=0;const set=villageObjectSets[Math.floor(Math.random()*villageObjectSets.length)];
+ villageTarget=set.emoji;villageNeed=set.count;$("village-target").textContent=`${set.emoji} ${set.name} × ${set.count}`;
+ $("village-feedback").textContent=`Find all ${set.count} ${set.name}.`;
+ const scene=$("village-scene");scene.innerHTML="";
+ const items=Array.from({length:48},()=>set.others[Math.floor(Math.random()*set.others.length)]);
+ const slots=new Set();while(slots.size<set.count)slots.add(Math.floor(Math.random()*items.length));
+ slots.forEach(i=>items[i]=set.emoji);items.sort(()=>Math.random()-.5).forEach(emoji=>{
+  const item=document.createElement("button");item.className="village-object";item.textContent=emoji;item.setAttribute("aria-label","Village object");
+  item.addEventListener("click",()=>{if(item.disabled)return;if(emoji===villageTarget){item.disabled=true;item.classList.add("found");villageFound++;$("village-feedback").textContent=`Found ${villageFound}/${villageNeed}!`;if(villageFound===villageNeed){$("village-feedback").textContent="All objects found! 🎉";openGameReward("village");}}else $("village-feedback").textContent="Not that one — keep searching!";});
+  scene.append(item);
+ });
 }

@@ -80,3 +80,17 @@ footer{color:#7184a7}.toast{background:#101a31;border:1px solid rgba(0,234,255,.
 .reward-dialog .reward-message{min-height:15px;margin:12px 0 0;color:#ffcf7a;font-size:12px}
 .reward-dialog .reward-message.success{color:#78f4c5}
 @keyframes reward-pop{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+
+.neon-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+.neon-tabs .tab{color:#78dfff;border:1px solid #163e58;background:linear-gradient(145deg,#0d1728,#10152a);box-shadow:inset 0 0 12px #00cfff0a}
+.neon-tabs .tab.active{color:#a8f6ff;border-color:#24d9ff;background:linear-gradient(135deg,#12364b,#302050);box-shadow:0 0 16px #00d9ff24,inset 0 0 12px #00d9ff12}
+.neon-tabs .tab span{font-size:11px}
+#panel-profile>.profile-hero{margin:18px 0}
+.profile-withdraw-heading{margin:24px 0 10px}.profile-withdraw-heading h2{margin:0;color:#ffe19a;font:800 22px Manrope}
+.profile-withdraw-heading p{margin:6px 0;color:#aebbd3;font-size:12px}
+#panel-profile .conversion>div{border-color:#584725;background:linear-gradient(145deg,#171729,#201a11)}
+#panel-profile .conversion b{color:#ffe2a0}
+#panel-profile input{background:#0b1424;color:#eef8ff;border-color:#39435c}
+.withdraw-gold{border:1px solid #ffe29a!important;border-radius:15px!important;background:linear-gradient(110deg,#fff0a3,#ffca3a 50%,#e99b17)!important;color:#362200!important;font:900 16px Manrope!important;box-shadow:0 0 22px #ffbf3855!important;min-height:56px}
+.profile-card{padding:20px 0 10px}.profile-card .avatar{background:linear-gradient(135deg,#10d9f5,#7352ff);box-shadow:0 0 18px #00cfff33}
+@media(max-width:360px){.neon-tabs .tab{gap:3px;padding:10px 2px}.neon-tabs .tab span{font-size:10px}}
