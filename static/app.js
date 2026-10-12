@@ -48,7 +48,7 @@ document.querySelectorAll(".tab").forEach(btn=>btn.addEventListener("click",()=>
 const ADSGRAM_BLOCK_ID = "task-53503";
 let adController = null;
 try {
-  if (window.Adsgram && ADSGRAM_BLOCK_ID !== "YOUR_ADSGRAM_BLOCK_ID") {
+  if (window.Adsgram && ADSGRAM_BLOCK_ID !== "task-53503") {
     adController = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
   }
 } catch (e) { console.error("AdsGram initialization failed", e); }
