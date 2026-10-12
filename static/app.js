@@ -249,3 +249,6 @@ function newVillage(){
   scene.append(item);
  });
 }
+
+// Ensure New village challenge always starts a fresh randomized round.
+document.getElementById("village-reset")?.addEventListener("click", () => { newVillage(); });

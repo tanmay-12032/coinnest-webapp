@@ -99,3 +99,21 @@ footer{color:#7184a7}.toast{background:#101a31;border:1px solid rgba(0,234,255,.
 #maze-new-game{margin-top:10px;border-color:#b58b2c;color:#ffe39a}
 .incorrect-dialog{border-color:#f26b7b;box-shadow:0 0 22px #ff456455,0 0 48px #8b5cff22}
 .incorrect-dialog .reward-coin{filter:drop-shadow(0 0 10px #ff596a88)}
+
+/* Keep the four main navigation options pinned to the bottom of the screen */
+.neon-tabs{
+ position:fixed!important;
+ left:12px!important;
+ right:12px!important;
+ bottom:calc(12px + env(safe-area-inset-bottom, 0px))!important;
+ z-index:1000!important;
+ width:auto!important;
+ margin:0!important;
+ padding:8px!important;
+ border:1px solid #263b58!important;
+ border-radius:18px!important;
+ background:rgba(7,12,25,.96)!important;
+ backdrop-filter:blur(16px);
+ box-shadow:0 -5px 28px #00d9ff18,0 8px 28px #0008!important;
+}
+body{padding-bottom:100px!important}
