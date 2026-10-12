@@ -225,7 +225,7 @@ def me():
 @app.post("/api/claim-game-reward")
 @require_user
 def claim_game_reward():
-    """Grant 5 coins with a server-enforced 10-minute cooldown across all games."""
+    """Grant 5 coins with a separate server-enforced 10-minute cooldown per game."""
     user = request.user_data
     if user["telegram_id"] == "demo-user":
         return jsonify({"error": "Open CoinNest inside Telegram to claim real coins."}), 401
@@ -237,15 +237,15 @@ def claim_game_reward():
     reward = 5
     with db() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        last = conn.execute("SELECT created_at FROM game_reward_claims WHERE telegram_id=? ORDER BY created_at DESC LIMIT 1", (user["telegram_id"],)).fetchone()
+        last = conn.execute("SELECT created_at FROM game_reward_claims WHERE telegram_id=? AND game=? ORDER BY created_at DESC LIMIT 1", (user["telegram_id"], game)).fetchone()
         if last and now - int(last["created_at"]) < 600:
             remaining = 600 - (now - int(last["created_at"]))
             conn.rollback()
-            return jsonify({"error": f"Please wait {remaining // 60}m {remaining % 60}s before claiming another game reward."}), 429
+            return jsonify({"error": f"Please wait {remaining // 60}m {remaining % 60}s before claiming another {game} reward."}), 429
         conn.execute("INSERT INTO game_reward_claims(telegram_id, game, coins, created_at) VALUES(?,?,?,?)", (user["telegram_id"], game, reward, now))
         conn.execute("UPDATE users SET balance=balance+? WHERE telegram_id=?", (reward, user["telegram_id"]))
         conn.commit()
-    return jsonify({"ok": True, "coins_added": reward, "message": "5 coins added to your balance! You can claim again in 10 minutes."})
+    return jsonify({"ok": True, "coins_added": reward, "message": f"5 coins added for {game}! This game's next claim is available in 10 minutes."})
 
 
 @app.post("/api/claim-ad")
