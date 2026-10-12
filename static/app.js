@@ -8,42 +8,9 @@ async function api(path, options={}) {
   const headers = {"Content-Type":"application/json","X-Telegram-Init-Data":initData,...(options.headers||{})};
   const res = await fetch(path,{...options,headers});
   const data = await res.json().catch(()=>({error:"Server returned an invalid response"}));
-  if(!res.ok) {
-    if(res.status===428 && Array.isArray(data.required_channels)) showJoinPopup(data.required_channels);
-    const err = new Error(data.error || "Request failed"); err.status=res.status; err.data=data; throw err;
-  }
+  if(!res.ok) throw new Error(data.error || "Request failed");
   return data;
 }
-
-function showJoinPopup(channels){
-  const overlay=$("join-overlay"), list=$("join-list"), message=$("join-message");
-  list.textContent=""; message.textContent="";
-  if(!channels.length){overlay.hidden=true;return}
-  channels.forEach((channel,index)=>{
-    const card=document.createElement("div");card.className="join-card";
-    const icon=document.createElement("div");icon.className="join-card-icon";icon.textContent=channel.title?.toLowerCase().includes("group")?"☏":"⚡";
-    const copy=document.createElement("div");copy.className="join-card-copy";
-    const title=document.createElement("b");title.textContent=channel.title||channel.channel_id||`Channel ${index+1}`;
-    const type=document.createElement("span");type.textContent="CHANNEL / GROUP";
-    copy.append(title,type);
-    const button=document.createElement("button");button.className="join-button";button.textContent="Join";
-    button.addEventListener("click",()=>{if(channel.join_url){if(tg?.openTelegramLink)tg.openTelegramLink(channel.join_url);else window.open(channel.join_url,"_blank","noopener")}else message.textContent="Join link unavailable. Please contact the admin."});
-    card.append(icon,copy,button);list.append(card);
-  });
-  overlay.hidden=false;
-}
-async function verifyJoined(){
-  const button=$("verify-join"), message=$("join-message");
-  button.disabled=true;button.textContent="Checking membership…";message.textContent="";
-  try{
-    const result=await api("/api/join-status");
-    if(result.required_channels?.length){showJoinPopup(result.required_channels);message.textContent="Please join every listed channel, then try again.";}
-    else {$("join-overlay").hidden=true;await refresh();toast("Membership verified!");}
-  }catch(e){message.textContent=e.message||"Could not verify membership. Try again."}
-  finally{button.disabled=false;button.textContent="◉  I’ve joined — continue"}
-}
-$("verify-join").addEventListener("click",verifyJoined);
-
 function renderHistory(target){
   const el=$(target);
   if(!state.withdrawals.length){el.className="history empty";el.textContent="No withdrawal requests yet.";return}
@@ -77,7 +44,36 @@ document.querySelectorAll(".tab").forEach(btn=>btn.addEventListener("click",()=>
   document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===btn));
   document.querySelectorAll(".panel").forEach(x=>x.classList.toggle("active",x.id==="panel-"+btn.dataset.tab));
 }));
-$("watch-btn").addEventListener("click",async()=>{try{await api("/api/claim-ad",{method:"POST",body:"{}"})}catch(e){toast(e.message)}});
+// Replace this with the numeric Reward block ID from your AdsGram publisher dashboard.
+const ADSGRAM_BLOCK_ID = "YOUR_ADSGRAM_BLOCK_ID";
+let adController = null;
+try {
+  if (window.Adsgram && ADSGRAM_BLOCK_ID !== "YOUR_ADSGRAM_BLOCK_ID") {
+    adController = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
+  }
+} catch (e) { console.error("AdsGram initialization failed", e); }
+
+$("watch-btn").addEventListener("click", async () => {
+  const btn = $("watch-btn");
+  if (ADSGRAM_BLOCK_ID === "YOUR_ADSGRAM_BLOCK_ID") {
+    toast("Add your AdsGram Reward Block ID in static/app.js first.");
+    return;
+  }
+  if (!window.Adsgram) { toast("AdsGram script is not loaded. Please retry."); return; }
+  try {
+    adController = adController || window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
+    btn.disabled = true; btn.textContent = "Loading ad…";
+    await adController.show();
+    // AdsGram's rewarded SDK resolves after the rewarded ad completes.
+    const data = await api("/api/claim-ad", { method: "POST", body: "{}" });
+    toast(data.message || "Reward added!");
+    await refresh();
+  } catch (e) {
+    toast(e.message || "Ad was not completed. No coins were added.");
+  } finally {
+    btn.disabled = false; btn.textContent = "Watch ads";
+  }
+});
 $("amount").addEventListener("input",()=>{
   const amount=Math.max(0,Number($("amount").value)||0);
   $("coin-cost").textContent=`Cost: ${(amount*100).toLocaleString("en-IN")} coins`;
