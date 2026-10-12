@@ -21,6 +21,26 @@
       <div class="section-head"><div><h2>Earn coins</h2><p>Watch verified ads to collect rewards.</p></div><div class="coin-icon">✦</div></div>
       <div class="ad-card"><div class="ad-symbol">▶</div><div class="ad-copy"><b>Watch an ad</b><span>Earn 10 coins per verified ad</span><small>Daily limit: 25 ads</small></div><button id="watch-btn" class="primary">Watch ads</button></div>
       <div class="notice" id="ad-notice">Watch a rewarded ad to earn 10 coins. Ads must be available in your AdsGram block.</div>
+      <div class="section-head games-heading"><div><h2>Games</h2><p>Play mini games in CoinNest</p></div><div class="coin-icon">🎮</div></div>
+      <div class="games-grid">
+        <button class="game-card" data-game="math"><span class="game-emoji">🧠</span><b>Math Quiz</b><small>Quick maths challenge</small></button>
+        <button class="game-card" data-game="maze"><span class="game-emoji">🌀</span><b>Maze Escape</b><small>Guide the ball to exit</small></button>
+        <button class="game-card wide" data-game="village"><span class="game-emoji">🏡</span><b>Find the Objects</b><small>Search a busy village scene</small></button>
+      </div>
+      <section class="game-panel" id="game-math" hidden>
+        <div class="game-top"><h3>🧠 Math Quiz</h3><button class="secondary" data-close-game>Close</button></div>
+        <p id="math-question">Tap Start to begin.</p><div id="math-answers" class="answer-grid"></div><button class="primary full" id="math-start">Start quiz</button><p class="game-feedback" id="math-feedback"></p>
+      </section>
+      <section class="game-panel" id="game-maze" hidden>
+        <div class="game-top"><h3>🌀 Maze Escape</h3><button class="secondary" data-close-game>Close</button></div>
+        <p>Move the ball to the green exit using the arrows.</p><div id="maze-board" class="maze-board"></div>
+        <div class="maze-controls"><button data-move="up">↑</button><div><button data-move="left">←</button><button data-move="down">↓</button><button data-move="right">→</button></div></div><p class="game-feedback" id="maze-feedback"></p>
+      </section>
+      <section class="game-panel" id="game-village" hidden>
+        <div class="game-top"><h3>🏡 Find the Objects</h3><button class="secondary" data-close-game>Close</button></div>
+        <p>Find all the requested objects in the village.</p><p class="village-target">Find: <b id="village-target">🪣 bucket × 3</b></p>
+        <div class="village-scene" id="village-scene" aria-label="Village hidden-object game"></div><p class="game-feedback" id="village-feedback"></p><button class="secondary full" id="village-reset">New village challenge</button>
+      </section>
       <div class="section-head history-head"><div><h2>Recent withdrawals</h2><p>Your latest requests</p></div></div>
       <div id="home-history" class="history empty">No withdrawal requests yet.</div>
     </section>
