@@ -55,7 +55,7 @@ try {
 
 $("watch-btn").addEventListener("click", async () => {
   const btn = $("watch-btn");
-  if (ADSGRAM_BLOCK_ID === "task-53503") {
+  if (ADSGRAM_BLOCK_ID === "your_ads_gram_block") {
     toast("Add your AdsGram Reward Block ID in static/app.js first.");
     return;
   }
