@@ -10,18 +10,21 @@
 <body>
 <div class="app">
   <header><div class="brandmark">C</div><div><div class="brand">CoinNest</div><div class="sub">Your rewards, your wallet</div></div><div class="pill" id="mode-pill">Wallet</div></header>
-  <section class="hero">
+  <nav class="tabs neon-tabs"><button class="tab active" data-tab="home">🏠 <span>Home</span></button><button class="tab" data-tab="games">🎮 <span>Game</span></button><button class="tab" data-tab="refer">👥 <span>Refer</span></button><button class="tab" data-tab="profile">👤 <span>Profile</span></button></nav>
+  <main>
+    <section class="panel active" id="panel-home">\n  <section class="hero">
     <div class="eyebrow">TOTAL BALANCE</div><div class="balance"><span id="balance">—</span><small> coins</small></div>
     <div class="rupee" id="rupee-balance">Loading balance…</div>
     <div class="hero-bottom"><span>100 coins = ₹1</span><span class="dot"></span><span id="ads-count">0/25 ads today</span></div>
   </section>
-  <nav class="tabs"><button class="tab active" data-tab="home">⌂ <span>Home</span></button><button class="tab" data-tab="wallet">▣ <span>Wallet</span></button><button class="tab" data-tab="refer">↗ <span>Refer</span></button><button class="tab" data-tab="profile">♙ <span>Profile</span></button></nav>
-  <main>
-    <section class="panel active" id="panel-home">
+
       <div class="section-head"><div><h2>Earn coins</h2><p>Watch verified ads to collect rewards.</p></div><div class="coin-icon">✦</div></div>
       <div class="ad-card"><div class="ad-symbol">▶</div><div class="ad-copy"><b>Watch an ad</b><span>Earn 10 coins per verified ad</span><small>Daily limit: 25 ads</small></div><button id="watch-btn" class="primary">Watch ads</button></div>
       <div class="notice" id="ad-notice">Watch a rewarded ad to earn 10 coins. Ads must be available in your AdsGram block.</div>
-      <div class="section-head games-heading"><div><h2>Games</h2><p>Play mini games in CoinNest</p></div><div class="coin-icon">🎮</div></div>
+      <div class="section-head history-head"><div><h2>Recent withdrawals</h2><p>Your latest requests</p></div></div>
+      <div id="home-history" class="history empty">No withdrawal requests yet.</div>
+    </section>
+    <section class="panel" id="panel-games">\n      <div class="section-head games-heading"><div><h2>Games</h2><p>Play mini games in CoinNest</p></div><div class="coin-icon">🎮</div></div>
       <div class="games-grid">
         <button class="game-card" data-game="math"><span class="game-emoji">🧠</span><b>Math Quiz</b><small>Quick maths challenge</small></button>
         <button class="game-card" data-game="maze"><span class="game-emoji">🌀</span><b>Maze Escape</b><small>Guide the ball to exit</small></button>
@@ -41,24 +44,7 @@
         <p>Find all the requested objects in the village.</p><p class="village-target">Find: <b id="village-target">🪣 bucket × 3</b></p>
         <div class="village-scene" id="village-scene" aria-label="Village hidden-object game"></div><p class="game-feedback" id="village-feedback"></p><button class="secondary full" id="village-reset">New village challenge</button>
       </section>
-      <div class="section-head history-head"><div><h2>Recent withdrawals</h2><p>Your latest requests</p></div></div>
-      <div id="home-history" class="history empty">No withdrawal requests yet.</div>
-    </section>
-    <section class="panel" id="panel-wallet">
-      <div class="section-head"><div><h2>My wallet</h2><p>Withdraw your earned coins to UPI.</p></div></div>
-      <div class="conversion"><div><span>Conversion rate</span><b>100 coins = ₹1</b></div><div><span>Minimum withdrawal</span><b>₹10</b></div></div>
-      <form id="withdraw-form">
-        <label for="amount">Withdrawal amount (₹)</label><input id="amount" type="number" min="10" step="1" placeholder="e.g. 10" required>
-        <div class="helper" id="coin-cost">Cost: 1,000 coins</div>
-        <label for="upi">UPI ID</label><input id="upi" type="text" autocomplete="off" placeholder="yourname@bank" maxlength="100" required>
-        <button class="primary full" type="submit" id="withdraw-btn">Request withdrawal</button>
-        <p class="smallprint">Requests are sent to the CoinNest admin channel for manual review. Payout is not automatic.</p>
-      </form>
-      <div id="withdraw-result" class="result" hidden></div>
-      <div class="section-head history-head"><div><h2>Request history</h2></div></div>
-      <div id="wallet-history" class="history empty">No withdrawal requests yet.</div>
-    </section>
-    <section class="panel" id="panel-refer">
+    </section>\n    <section class="panel" id="panel-refer">
       <div class="section-head"><div><h2>Refer & Earn</h2><p>Invite friends to CoinNest</p></div><div class="coin-icon">🎁</div></div>
       <div class="ref-hero"><span>Referral rewards</span><strong>20% commission + 50 coins</strong><small>Per eligible referral after 5 verified ads</small></div>
       <div class="ref-stats"><div><small>Total referrals</small><b id="ref-total">—</b></div><div><small>Completed</small><b id="ref-completed">—</b></div><div><small>Bonus coins</small><b id="ref-bonus">—</b></div></div>
@@ -68,11 +54,24 @@
     </section>
     <section class="panel" id="panel-profile">
       <div class="profile-card"><div class="avatar" id="avatar">C</div><div><h2 id="profile-name">Loading profile…</h2><p id="profile-username">@username</p><small id="profile-id">Telegram ID: —</small></div></div>
-      <div class="info-row"><span>Coin balance</span><b id="profile-balance">—</b></div>
-      <div class="info-row"><span>Ads watched today</span><b id="profile-ads">—</b></div>
-      <div class="info-row"><span>Reward rate</span><b>10 coins / verified ad</b></div>
-      <div class="info-row"><span>Account source</span><b>Telegram</b></div>
-      <div class="notice">Your profile is created from your Telegram ID and name when you open this Mini App from the bot. Do not share your bot token with anyone.</div>
+      <section class="hero profile-hero">
+        <div class="eyebrow">TOTAL BALANCE</div><div class="balance"><span id="profile-hero-balance">—</span><small> coins</small></div>
+        <div class="rupee" id="profile-hero-rupees">Loading balance…</div>
+        <div class="hero-bottom"><span>100 coins = ₹1</span><span class="dot"></span><span id="profile-hero-ads-count">0/25 ads today</span></div>
+      </section>
+      <div class="profile-withdraw-heading"><h2>Withdraw</h2><p>Request a manual payout</p></div>
+      <div class="conversion"><div><span>Conversion rate</span><b>100 coins = ₹1</b></div><div><span>Minimum withdrawal</span><b>₹10</b></div></div>
+      <form id="withdraw-form">
+        <label for="amount">Withdrawal amount (₹)</label><input id="amount" type="number" min="10" step="1" placeholder="e.g. 10" required>
+        <div class="helper" id="coin-cost">Cost: 1,000 coins</div>
+        <label for="payz-number">Payz Gateway number</label><input id="payz-number" type="tel" inputmode="tel" autocomplete="off" placeholder="Enter your Payz number" maxlength="30" required>
+        <button class="withdraw-gold full" type="submit" id="withdraw-btn">Withdraw now</button>
+        <p class="smallprint">Requests are sent for manual review. Payout is not automatic.</p>
+      </form>
+      <div id="withdraw-result" class="result" hidden></div>
+      <div class="section-head history-head"><div><h2>Withdrawal history</h2></div></div>
+      <div id="wallet-history" class="history empty">No withdrawal requests yet.</div>
+      <div class="notice">Your profile is created from your Telegram ID and name when you open this Mini App from the bot. Do not share your bot token.</div>
     </section>
   </main>
   <footer>CoinNest <span>•</span> Earn fairly, withdraw safely</footer>
