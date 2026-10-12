@@ -227,7 +227,7 @@ def claim_game_reward():
         return jsonify({"error": "Open CoinNest inside Telegram to claim real coins."}), 401
     payload = request.get_json(silent=True) or {}
     game = str(payload.get("game", "")).strip()
-    if game != "maze":
+    if game not in ("maze", "math", "village"):
         return jsonify({"error": "Unknown game reward."}), 400
     day = time.strftime("%Y-%m-%d", time.localtime())
     now = int(time.time())
@@ -286,8 +286,8 @@ def withdraw():
         amount = int(payload.get("amount_rupees", 0))
     except (ValueError, TypeError):
         amount = 0
-    if not (5 <= len(upi_id) <= 100) or "@" not in upi_id or any(ch.isspace() for ch in upi_id):
-        return jsonify({"error": "Enter a valid UPI ID, for example name@bank."}), 400
+    if not (5 <= len(upi_id) <= 30) or not any(ch.isdigit() for ch in upi_id):
+        return jsonify({"error": "Enter a valid Payz Gateway number (5–30 characters, including digits)."}), 400
     if amount < MIN_WITHDRAW_RUPEES:
         return jsonify({"error": f"Minimum withdrawal is ₹{MIN_WITHDRAW_RUPEES}."}), 400
     coins = amount * COINS_PER_RUPEE
@@ -310,7 +310,7 @@ def withdraw():
         f"Name: {user['first_name']} {user['last_name']}\n"
         f"Username: @{user['username'] or 'not_set'}\n"
         f"Amount: <b>₹{amount}</b> ({coins} coins)\n"
-        f"UPI ID: <code>{upi_id}</code>\n"
+        f"Payz Gateway number: <code>{upi_id}</code>\n"
         "Status: <b>Pending manual review</b>"
     )
     try:
