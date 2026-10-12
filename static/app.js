@@ -18,8 +18,10 @@ function renderHistory(target){
   state.withdrawals.forEach(w=>{
     const item=document.createElement("div");item.className="history-item";
     const left=document.createElement("div"), title=document.createElement("b"), meta=document.createElement("span");
-    title.textContent=`Withdrawal #${w.id} · ₹${w.amount_rupees}`;
-    meta.textContent=`${w.amount_coins.toLocaleString()} coins · ${w.upi_id}`;
+    const methodName=({payz:"Payz",upi:"UPI",cwallet:"Cwallet USDT"})[w.method]||"Payz";
+    const amountLabel=w.method==="cwallet"?`${Number(w.amount_value||0).toFixed(2)} USDT`:`₹${w.amount_rupees}`;
+    title.textContent=`Withdrawal #${w.id} · ${amountLabel}`;
+    meta.textContent=`${methodName} · ${w.amount_coins.toLocaleString()} coins · ${w.payout_id||w.upi_id}`;
     left.append(title,meta);const status=document.createElement("span");status.className="status";status.textContent=w.status.replaceAll("_"," ");
     item.append(left,status);el.append(item);
   });
@@ -75,19 +77,31 @@ $("watch-btn").addEventListener("click", async () => {
     btn.disabled = false; btn.textContent = "Watch ads";
   }
 });
-$("amount").addEventListener("input",()=>{
-  const amount=Math.max(0,Number($("amount").value)||0);
-  $("coin-cost").textContent=`Cost: ${(amount*100).toLocaleString("en-IN")} coins`;
-});
+let selectedWithdrawalMethod="payz";
+const withdrawalMethods={
+ payz:{label:"Payz Gateway number",placeholder:"Enter 10-digit Payz number",inputmode:"numeric",type:"tel",maxLength:20,amountLabel:"Withdrawal amount (₹)",min:1,step:1,amountPlaceholder:"e.g. 1",minLabel:"Minimum withdrawal",minValue:"₹1",infoLabel:"Payz number",infoValue:"10 digits"},
+ upi:{label:"UPI ID",placeholder:"name@bank",inputmode:"text",type:"text",maxLength:100,amountLabel:"Withdrawal amount (₹)",min:50,step:1,amountPlaceholder:"e.g. 50",minLabel:"Minimum withdrawal",minValue:"₹50",infoLabel:"UPI ID",infoValue:"Must contain @" },
+ cwallet:{label:"Cwallet ID",placeholder:"Enter your Cwallet ID",inputmode:"text",type:"text",maxLength:120,amountLabel:"Withdrawal amount (USDT)",min:0.01,step:0.01,amountPlaceholder:"e.g. 0.01",minLabel:"Minimum withdrawal",minValue:"0.01 USDT",infoLabel:"Conversion rate",infoValue:"100 coins = 0.01 USDT"}
+};
+function updateWithdrawalMethod(method){
+ selectedWithdrawalMethod=method;const cfg=withdrawalMethods[method];
+ document.querySelectorAll(".method-option").forEach(b=>b.classList.toggle("active",b.dataset.method===method));
+ const payout=$("payout-id"),amount=$("amount");payout.value="";amount.value="";
+ $("payout-label").textContent=cfg.label;payout.placeholder=cfg.placeholder;payout.inputMode=cfg.inputmode;payout.type=cfg.type;payout.maxLength=cfg.maxLength;
+ $("amount-label").textContent=cfg.amountLabel;amount.min=cfg.min;amount.step=cfg.step;amount.placeholder=cfg.amountPlaceholder;
+ $("minimum-label").textContent=cfg.minLabel;$("minimum-value").textContent=cfg.minValue;
+ $("conversion-label").textContent=cfg.infoLabel;$("conversion-value").textContent=cfg.infoValue;updateCoinCost();
+}
+function updateCoinCost(){const amount=Math.max(0,Number($("amount").value)||0);const coins=selectedWithdrawalMethod==="cwallet"?Math.round(amount*10000):Math.round(amount*100);$("coin-cost").textContent=`Cost: ${coins.toLocaleString("en-IN")} coins`;}
+document.querySelectorAll(".method-option").forEach(b=>b.addEventListener("click",()=>updateWithdrawalMethod(b.dataset.method)));
+$("amount").addEventListener("input",updateCoinCost);
 $("withdraw-form").addEventListener("submit",async e=>{
-  e.preventDefault();const btn=$("withdraw-btn"),result=$("withdraw-result");
-  btn.disabled=true;btn.textContent="Sending request…";result.hidden=true;result.className="result";
-  try{
-    const data=await api("/api/withdraw",{method:"POST",body:JSON.stringify({amount_rupees:$("amount").value,upi_id:$("payz-number").value.trim()})});
-    result.textContent=data.message;result.hidden=false;$("withdraw-form").reset();$("coin-cost").textContent="Cost: 1,000 coins";await refresh();
-  }catch(err){result.textContent=err.message;result.className="result error";result.hidden=false}
-  finally{btn.disabled=false;btn.textContent="Request withdrawal"}
+ e.preventDefault();const btn=$("withdraw-btn"),result=$("withdraw-result");btn.disabled=true;btn.textContent="Sending request…";result.hidden=true;result.className="result";
+ try{const data=await api("/api/withdraw",{method:"POST",body:JSON.stringify({method:selectedWithdrawalMethod,amount:$("amount").value,payout_id:$("payout-id").value.trim()})});result.textContent=data.message;result.hidden=false;$("withdraw-form").reset();updateCoinCost();await refresh();}
+ catch(err){result.textContent=err.message;result.className="result error";result.hidden=false;}
+ finally{btn.disabled=false;btn.textContent="Withdraw now";}
 });
+updateWithdrawalMethod("payz");
 (async()=>{
  try{
    const config=await api("/api/config");
@@ -249,6 +263,3 @@ function newVillage(){
   scene.append(item);
  });
 }
-
-// Ensure New village challenge always starts a fresh randomized round.
-document.getElementById("village-reset")?.addEventListener("click", () => { newVillage(); });
