@@ -148,6 +148,7 @@ def require_user(fn):
         user = current_user()
         if not user:
             return jsonify({"error": "Telegram authentication failed. Open this app from your Telegram bot."}), 401
+            request.user_data = user
         with db() as conn:
             if conn.execute("SELECT 1 FROM banned_users WHERE telegram_id=?", (user["telegram_id"],)).fetchone():
                 return jsonify({"error": "Your account is banned."}), 403
