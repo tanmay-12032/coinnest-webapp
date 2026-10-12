@@ -17,6 +17,7 @@ MIN_WITHDRAW_RUPEES = 10
 OWNER_ADMIN_ID = os.environ.get("OWNER_ADMIN_ID", "1849699189").strip()
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "https://coinnest-webapp.onrender.com").strip().rstrip("/")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "").strip()
+ADSGRAM_REWARD_SECRET = os.environ.get("ADSGRAM_REWARD_SECRET", "").strip()
 def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -280,6 +281,48 @@ def claim_ad():
     return jsonify({"ok": True, "reward": COINS_PER_AD,
                     "message": f"Success! {COINS_PER_AD} coins added.",
                     "ads_today": count + 1, "daily_limit": DAILY_AD_LIMIT})
+
+@app.get("/adsgram/reward")
+def adsgram_reward_callback():
+    """AdsGram server-to-server reward callback.
+
+    Configure the AdsGram Reward URL as:
+    https://YOUR-DOMAIN/adsgram/reward?secret=YOUR_SECRET&userId=[userId]
+    The secret must also be set as ADSGRAM_REWARD_SECRET in the hosting environment.
+    """
+    if not ADSGRAM_REWARD_SECRET:
+        app.logger.error("AdsGram reward callback rejected: ADSGRAM_REWARD_SECRET is not configured")
+        return jsonify({"ok": False, "error": "Reward callback is not configured"}), 503
+
+    supplied_secret = request.args.get("secret", "")
+    if not supplied_secret or not hmac.compare_digest(supplied_secret, ADSGRAM_REWARD_SECRET):
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
+
+    telegram_id = request.args.get("userId", "").strip()
+    if not telegram_id.isdigit() or len(telegram_id) > 20:
+        return jsonify({"ok": False, "error": "Invalid userId"}), 400
+
+    today = time.strftime("%Y-%m-%d", time.localtime())
+    now = int(time.time())
+    with db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        user_row = conn.execute("SELECT telegram_id FROM users WHERE telegram_id=?", (telegram_id,)).fetchone()
+        if not user_row:
+            conn.rollback()
+            return jsonify({"ok": False, "error": "User not found"}), 404
+        count_row = conn.execute("SELECT COUNT(*) AS n FROM ad_claims WHERE telegram_id=? AND day=?", (telegram_id, today)).fetchone()
+        count = int(count_row["n"] if count_row else 0)
+        if count >= DAILY_AD_LIMIT:
+            conn.rollback()
+            return jsonify({"ok": False, "error": "Daily ad reward limit reached"}), 429
+        conn.execute("INSERT INTO ad_claims(telegram_id, day, created_at) VALUES(?,?,?)", (telegram_id, today, now))
+        conn.execute("UPDATE users SET balance=balance+? WHERE telegram_id=?", (COINS_PER_AD, telegram_id))
+        conn.commit()
+
+    # AdsGram calls this URL after a completed reward event. A generic GET callback
+    # has no event ID here, so provider-side retry deduplication cannot be guaranteed.
+    return jsonify({"ok": True, "reward": COINS_PER_AD, "ads_today": count + 1})
+
 
 @app.post("/api/withdraw")
 @require_user
