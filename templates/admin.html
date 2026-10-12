@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CoinNest Admin</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0b1020;color:#edf2ff;font:15px system-ui,sans-serif}
+main{max-width:760px;margin:auto;padding:20px}.hero,.panel{background:#141c31;border:1px solid #263452;border-radius:16px;padding:18px;margin:14px 0}
+h1{margin:0 0 8px}h2{font-size:18px;margin:0 0 12px}.muted{color:#9eacc8}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+input,select,button{width:100%;padding:12px;border-radius:10px;border:1px solid #344564;background:#0c1427;color:#fff;margin:5px 0;font:inherit}
+button{background:#6d7cff;border:0;font-weight:700;cursor:pointer}button.danger{background:#a43b55}pre{white-space:pre-wrap;word-break:break-word;color:#a8f0c6}.hidden{display:none}
+</style></head>
+<body><main>
+<div class="hero"><h1>🪙 CoinNest Admin</h1><div class="muted">Owner ID configured on server. All actions are server-authorized.</div></div>
+<div id="status" class="panel">Checking Telegram admin access…</div>
+<div id="controls" class="hidden">
+<div class="grid">
+<section class="panel"><h2>Admin add / remove</h2><input id="adminId" placeholder="Telegram numeric user ID"><div class="grid"><button onclick="post('/api/admin/admins',{telegram_id:v('adminId'),action:'add'})">Add admin</button><button class="danger" onclick="post('/api/admin/admins',{telegram_id:v('adminId'),action:'remove'})">Remove admin</button></div></section>
+<section class="panel"><h2>Balance add / remove</h2><input id="balId" placeholder="Telegram numeric user ID"><input id="amount" type="number" min="1" placeholder="Coin amount"><input id="note" placeholder="Reason / note"><div class="grid"><button onclick="post('/api/admin/balance',{telegram_id:v('balId'),amount:v('amount'),note:v('note'),action:'add'})">Add coins</button><button class="danger" onclick="post('/api/admin/balance',{telegram_id:v('balId'),amount:v('amount'),note:v('note'),action:'remove'})">Remove coins</button></div></section>
+<section class="panel"><h2>Required channel add / remove</h2><input id="channel" placeholder="@channelusername or -100... ID"><input id="joinUrl" placeholder="Private channel invite URL (if needed)"><button onclick="post('/api/admin/channels',{channel:v('channel'),join_url:v('joinUrl'),action:'add'})">Add channel</button><button class="danger" onclick="post('/api/admin/channels',{channel:v('channel'),action:'remove'})">Remove channel by stored ID</button></section>
+<section class="panel"><h2>Ban / unban user</h2><input id="banId" placeholder="Telegram numeric user ID"><input id="reason" placeholder="Reason (optional)"><div class="grid"><button class="danger" onclick="post('/api/admin/ban',{telegram_id:v('banId'),reason:v('reason'),action:'ban'})">Ban user</button><button onclick="post('/api/admin/ban',{telegram_id:v('banId'),action:'unban'})">Unban user</button></div></section>
+</div>
+<section class="panel"><h2>Current admins, channels and bans</h2><button onclick="loadData()">Refresh lists</button><pre id="lists"></pre></section>
+</div>
+<script>
+const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
+function v(id){return document.getElementById(id).value.trim()}
+function headers(){return {'Content-Type':'application/json','X-Telegram-Init-Data':tg?.initData||''}}
+async function api(url,body){const r=await fetch(url,{method:body?'POST':'GET',headers:headers(),body:body?JSON.stringify(body):undefined});const d=await r.json().catch(()=>({error:'Invalid server response'}));if(!r.ok)throw Error(d.error||'Request failed');return d}
+async function post(url,body){try{const d=await api(url,body);show('Success: '+JSON.stringify(d));await loadData()}catch(e){show(e.message)}}
+function show(s){document.getElementById('status').textContent=s}
+async function loadData(){try{document.getElementById('lists').textContent=JSON.stringify(await api('/api/admin/data'),null,2)}catch(e){show(e.message)}}
+(async()=>{if(!tg?.initData){show('Open /adminpanel inside your Telegram Mini App. Direct browser access is not authenticated.');return}
+try{await api('/api/admin/status');document.getElementById('controls').classList.remove('hidden');show('Admin verified ✅');await loadData()}catch(e){show(e.message==='Your not admin 🚫'?'Your not admin 🚫':e.message)}})();
+</script></main></body></html>
