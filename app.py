@@ -187,7 +187,7 @@ def config():
 @app.get("/api/me")
 @require_user
 def me():
-    user = request.user_data
+    user = current_user()
     today = time.strftime("%Y-%m-%d", time.localtime())
     with db() as conn:
         row = conn.execute("SELECT balance FROM users WHERE telegram_id=?", (user["telegram_id"],)).fetchone()
