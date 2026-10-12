@@ -6,7 +6,7 @@ from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
 DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "coinnest.db"))
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
+BOT_TOKEN = "8912412112:AAHGCG7DOi2Ak798hp45CejBj4yUPEwcSQM"
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "CoinNest_bot").strip().lstrip("@")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "").strip()
 DEMO_MODE = os.environ.get("DEMO_MODE", "1") == "1"
