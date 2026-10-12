@@ -16,7 +16,7 @@ DAILY_AD_LIMIT = 25
 MIN_WITHDRAW_RUPEES = 10
 OWNER_ADMIN_ID = os.environ.get("OWNER_ADMIN_ID", "1849699189").strip()
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "https://coinnest-webapp.onrender.com").strip().rstrip("/")
-WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "CN_hook_7xP9mQ1vL8kR").strip()
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "").strip()
 
 def db():
     conn = sqlite3.connect(DB_PATH)
