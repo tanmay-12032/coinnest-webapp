@@ -99,3 +99,8 @@ footer{color:#7184a7}.toast{background:#101a31;border:1px solid rgba(0,234,255,.
 #maze-new-game{margin-top:10px;border-color:#b58b2c;color:#ffe39a}
 .incorrect-dialog{border-color:#f26b7b;box-shadow:0 0 22px #ff456455,0 0 48px #8b5cff22}
 .incorrect-dialog .reward-coin{filter:drop-shadow(0 0 10px #ff596a88)}
+
+/* Keep the four main navigation actions pinned to the bottom of the app */
+body{padding-bottom:calc(92px + env(safe-area-inset-bottom))}
+.app{padding-bottom:calc(108px + env(safe-area-inset-bottom))}
+.neon-tabs{position:fixed;left:50%;bottom:calc(10px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:1000;width:min(504px,calc(100vw - 24px));padding:8px;border:1px solid #29405f;border-radius:20px;background:rgba(7,13,30,.94);backdrop-filter:blur(14px);box-shadow:0 0 25px #00d9ff18}
