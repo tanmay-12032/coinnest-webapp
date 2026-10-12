@@ -1,0 +1,5 @@
+CoinNest visual update
+- Reworked main app theme to dark neon cyan/purple with glow reflections and glass-style cards.
+- Added a join-required popup showing required channels returned by the backend, with Join buttons and membership re-check.
+- Existing backend logic and admin page were preserved.
+Important: Keep BOT_TOKEN, WEBHOOK_SECRET and other secrets in Render environment variables, not in this package.
