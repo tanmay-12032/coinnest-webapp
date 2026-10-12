@@ -39,6 +39,10 @@ def init_db():
             telegram_id TEXT NOT NULL, game TEXT NOT NULL, day TEXT NOT NULL,
             coins INTEGER NOT NULL, created_at INTEGER NOT NULL,
             PRIMARY KEY (telegram_id, game, day))""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS game_reward_claims (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_id TEXT NOT NULL,
+            game TEXT NOT NULL, coins INTEGER NOT NULL, created_at INTEGER NOT NULL)""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_game_reward_claims_user_time ON game_reward_claims(telegram_id, created_at)")
         conn.execute("""CREATE TABLE IF NOT EXISTS admins (
             telegram_id TEXT PRIMARY KEY, added_by TEXT NOT NULL, created_at INTEGER NOT NULL)""")
         conn.execute("""CREATE TABLE IF NOT EXISTS banned_users (
@@ -221,7 +225,7 @@ def me():
 @app.post("/api/claim-game-reward")
 @require_user
 def claim_game_reward():
-    """Award the maze reward once per user per day."""
+    """Grant 5 coins with a server-enforced 10-minute cooldown across all games."""
     user = request.user_data
     if user["telegram_id"] == "demo-user":
         return jsonify({"error": "Open CoinNest inside Telegram to claim real coins."}), 401
@@ -229,22 +233,19 @@ def claim_game_reward():
     game = str(payload.get("game", "")).strip()
     if game not in ("maze", "math", "village"):
         return jsonify({"error": "Unknown game reward."}), 400
-    day = time.strftime("%Y-%m-%d", time.localtime())
     now = int(time.time())
     reward = 5
     with db() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        try:
-            conn.execute(
-                "INSERT INTO game_rewards(telegram_id, game, day, coins, created_at) VALUES(?,?,?,?,?)",
-                (user["telegram_id"], game, day, reward, now))
-        except sqlite3.IntegrityError:
+        last = conn.execute("SELECT created_at FROM game_reward_claims WHERE telegram_id=? ORDER BY created_at DESC LIMIT 1", (user["telegram_id"],)).fetchone()
+        if last and now - int(last["created_at"]) < 600:
+            remaining = 600 - (now - int(last["created_at"]))
             conn.rollback()
-            return jsonify({"error": "Maze reward already claimed today."}), 409
-        conn.execute("UPDATE users SET balance=balance+? WHERE telegram_id=?",
-                     (reward, user["telegram_id"]))
+            return jsonify({"error": f"Please wait {remaining // 60}m {remaining % 60}s before claiming another game reward."}), 429
+        conn.execute("INSERT INTO game_reward_claims(telegram_id, game, coins, created_at) VALUES(?,?,?,?)", (user["telegram_id"], game, reward, now))
+        conn.execute("UPDATE users SET balance=balance+? WHERE telegram_id=?", (reward, user["telegram_id"]))
         conn.commit()
-    return jsonify({"ok": True, "coins_added": reward, "message": "5 coins added to your balance!"})
+    return jsonify({"ok": True, "coins_added": reward, "message": "5 coins added to your balance! You can claim again in 10 minutes."})
 
 
 @app.post("/api/claim-ad")
