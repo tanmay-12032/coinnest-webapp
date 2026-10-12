@@ -8,9 +8,42 @@ async function api(path, options={}) {
   const headers = {"Content-Type":"application/json","X-Telegram-Init-Data":initData,...(options.headers||{})};
   const res = await fetch(path,{...options,headers});
   const data = await res.json().catch(()=>({error:"Server returned an invalid response"}));
-  if(!res.ok) throw new Error(data.error || "Request failed");
+  if(!res.ok) {
+    if(res.status===428 && Array.isArray(data.required_channels)) showJoinPopup(data.required_channels);
+    const err = new Error(data.error || "Request failed"); err.status=res.status; err.data=data; throw err;
+  }
   return data;
 }
+
+function showJoinPopup(channels){
+  const overlay=$("join-overlay"), list=$("join-list"), message=$("join-message");
+  list.textContent=""; message.textContent="";
+  if(!channels.length){overlay.hidden=true;return}
+  channels.forEach((channel,index)=>{
+    const card=document.createElement("div");card.className="join-card";
+    const icon=document.createElement("div");icon.className="join-card-icon";icon.textContent=channel.title?.toLowerCase().includes("group")?"☏":"⚡";
+    const copy=document.createElement("div");copy.className="join-card-copy";
+    const title=document.createElement("b");title.textContent=channel.title||channel.channel_id||`Channel ${index+1}`;
+    const type=document.createElement("span");type.textContent="CHANNEL / GROUP";
+    copy.append(title,type);
+    const button=document.createElement("button");button.className="join-button";button.textContent="Join";
+    button.addEventListener("click",()=>{if(channel.join_url){if(tg?.openTelegramLink)tg.openTelegramLink(channel.join_url);else window.open(channel.join_url,"_blank","noopener")}else message.textContent="Join link unavailable. Please contact the admin."});
+    card.append(icon,copy,button);list.append(card);
+  });
+  overlay.hidden=false;
+}
+async function verifyJoined(){
+  const button=$("verify-join"), message=$("join-message");
+  button.disabled=true;button.textContent="Checking membership…";message.textContent="";
+  try{
+    const result=await api("/api/join-status");
+    if(result.required_channels?.length){showJoinPopup(result.required_channels);message.textContent="Please join every listed channel, then try again.";}
+    else {$("join-overlay").hidden=true;await refresh();toast("Membership verified!");}
+  }catch(e){message.textContent=e.message||"Could not verify membership. Try again."}
+  finally{button.disabled=false;button.textContent="◉  I’ve joined — continue"}
+}
+$("verify-join").addEventListener("click",verifyJoined);
+
 function renderHistory(target){
   const el=$(target);
   if(!state.withdrawals.length){el.className="history empty";el.textContent="No withdrawal requests yet.";return}
