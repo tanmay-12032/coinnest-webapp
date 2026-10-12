@@ -17,7 +17,6 @@ MIN_WITHDRAW_RUPEES = 10
 OWNER_ADMIN_ID = os.environ.get("OWNER_ADMIN_ID", "1849699189").strip()
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "https://coinnest-webapp.onrender.com").strip().rstrip("/")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "").strip()
-
 def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -32,6 +31,11 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_id TEXT NOT NULL,
             amount_rupees INTEGER NOT NULL, amount_coins INTEGER NOT NULL, upi_id TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL)""")
+        existing_cols = {r[1] for r in conn.execute("PRAGMA table_info(withdrawals)").fetchall()}
+        for col, definition in (("method", "TEXT NOT NULL DEFAULT 'payz'"), ("payout_id", "TEXT NOT NULL DEFAULT ''"), ("amount_value", "REAL NOT NULL DEFAULT 0")):
+            if col not in existing_cols:
+                conn.execute(f"ALTER TABLE withdrawals ADD COLUMN {col} {definition}")
+        conn.execute("UPDATE withdrawals SET payout_id=upi_id WHERE payout_id='' AND upi_id IS NOT NULL")
         conn.execute("""CREATE TABLE IF NOT EXISTS ad_claims (
             id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_id TEXT NOT NULL, day TEXT NOT NULL,
             created_at INTEGER NOT NULL)""")
@@ -217,7 +221,7 @@ def me():
         row = conn.execute("SELECT balance FROM users WHERE telegram_id=?", (user["telegram_id"],)).fetchone()
         ads = conn.execute("SELECT COUNT(*) n FROM ad_claims WHERE telegram_id=? AND day=?",
                            (user["telegram_id"], today)).fetchone()["n"]
-        history = conn.execute("SELECT id, amount_rupees, amount_coins, upi_id, status, created_at FROM withdrawals WHERE telegram_id=? ORDER BY id DESC LIMIT 10",
+        history = conn.execute("SELECT id, amount_rupees, amount_coins, upi_id, status, created_at, method, payout_id, amount_value FROM withdrawals WHERE telegram_id=? ORDER BY id DESC LIMIT 10",
                                (user["telegram_id"],)).fetchall()
     return jsonify({"user": user, "balance": row["balance"], "ads_today": ads,
                     "withdrawals": [dict(x) for x in history]})
@@ -282,49 +286,60 @@ def claim_ad():
 def withdraw():
     user = request.user_data
     payload = request.get_json(silent=True) or {}
-    upi_id = str(payload.get("upi_id", "")).strip()
+    method = str(payload.get("method", "payz")).strip().lower()
+    payout_id = str(payload.get("payout_id", "")).strip()
+    if method not in ("payz", "upi", "cwallet"):
+        return jsonify({"error": "Choose Payz, UPI, or Cwallet USDT."}), 400
     try:
-        amount = int(payload.get("amount_rupees", 0))
+        amount_value = float(payload.get("amount", 0))
     except (ValueError, TypeError):
-        amount = 0
-    if not (5 <= len(upi_id) <= 30) or not any(ch.isdigit() for ch in upi_id):
-        return jsonify({"error": "Enter a valid Payz Gateway number (5–30 characters, including digits)."}), 400
-    if amount < MIN_WITHDRAW_RUPEES:
-        return jsonify({"error": f"Minimum withdrawal is ₹{MIN_WITHDRAW_RUPEES}."}), 400
-    coins = amount * COINS_PER_RUPEE
-    now = int(time.time())
+        amount_value = 0
+    if method == "payz":
+        if not (len(payout_id) == 10 and payout_id.isdigit()):
+            return jsonify({"error": "Enter your 10-digit Payz number."}), 400
+        if not amount_value.is_integer() or amount_value < 1:
+            return jsonify({"error": "Payz minimum withdrawal is ₹1."}), 400
+        amount_rupees=int(amount_value); coins=amount_rupees*100; display_amount=f"₹{amount_rupees}"; method_label="Payz Gateway"
+    elif method == "upi":
+        if not (3 <= len(payout_id) <= 100 and "@" in payout_id and payout_id.count("@") == 1):
+            return jsonify({"error": "Enter a valid UPI ID containing @."}), 400
+        if not amount_value.is_integer() or amount_value < 50:
+            return jsonify({"error": "UPI minimum withdrawal is ₹50."}), 400
+        amount_rupees=int(amount_value); coins=amount_rupees*100; display_amount=f"₹{amount_rupees}"; method_label="UPI"
+    else:
+        if not (3 <= len(payout_id) <= 120):
+            return jsonify({"error": "Enter a valid Cwallet ID."}), 400
+        if amount_value < 0.01 or round(amount_value, 2) != amount_value:
+            return jsonify({"error": "Cwallet minimum is 0.01 USDT; use up to 2 decimal places."}), 400
+        amount_rupees=0; coins=int(round(amount_value*10000)); display_amount=f"{amount_value:.2f} USDT"; method_label="Cwallet USDT"
+    now=int(time.time())
     with db() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute("SELECT balance FROM users WHERE telegram_id=?", (user["telegram_id"],)).fetchone()
+        row=conn.execute("SELECT balance FROM users WHERE telegram_id=?", (user["telegram_id"],)).fetchone()
         if not row or row["balance"] < coins:
             conn.rollback()
             return jsonify({"error": "Insufficient coin balance."}), 400
-        cur = conn.execute("INSERT INTO withdrawals(telegram_id, amount_rupees, amount_coins, upi_id, created_at) VALUES(?,?,?,?,?)",
-                           (user["telegram_id"], amount, coins, upi_id, now))
-        withdrawal_id = cur.lastrowid
+        cur=conn.execute("INSERT INTO withdrawals(telegram_id, amount_rupees, amount_coins, upi_id, created_at, method, payout_id, amount_value) VALUES(?,?,?,?,?,?,?,?)",
+            (user["telegram_id"], amount_rupees, coins, payout_id, now, method, payout_id, amount_value))
+        withdrawal_id=cur.lastrowid
         conn.execute("UPDATE users SET balance=balance-? WHERE telegram_id=?", (coins, user["telegram_id"]))
         conn.commit()
-    message = (
-        "🪙 <b>CoinNest Withdrawal Request</b>\n"
-        f"Request: <b>#{withdrawal_id}</b>\n"
-        f"User ID: <code>{user['telegram_id']}</code>\n"
-        f"Name: {user['first_name']} {user['last_name']}\n"
-        f"Username: @{user['username'] or 'not_set'}\n"
-        f"Amount: <b>₹{amount}</b> ({coins} coins)\n"
-        f"Payz Gateway number: <code>{upi_id}</code>\n"
-        "Status: <b>Pending manual review</b>"
-    )
+    safe_name=f"{user.get('first_name','')} {user.get('last_name','')}".strip() or "Unknown"
+    safe_username=user.get("username") or "not_set"
+    message=("🪙 <b>CoinNest Withdrawal Request</b>\n"
+        f"Request: <b>#{withdrawal_id}</b>\nUser ID: <code>{user['telegram_id']}</code>\n"
+        f"Name: {safe_name}\nUsername: @{safe_username}\nMethod: <b>{method_label}</b>\n"
+        f"Amount: <b>{display_amount}</b> ({coins:,} coins)\nWallet / payout ID: <code>{payout_id}</code>\n"
+        "Status: <b>Pending manual review</b>")
     try:
         telegram_send_message(message)
-    except Exception as exc:
-        # Refund the reserved coins if channel notification failed.
+    except Exception:
         with db() as conn:
             conn.execute("UPDATE users SET balance=balance+? WHERE telegram_id=?", (coins, user["telegram_id"]))
             conn.execute("UPDATE withdrawals SET status='notification_failed' WHERE id=?", (withdrawal_id,))
         app.logger.exception("Withdrawal channel notification failed")
         return jsonify({"error": "Could not send request to the Telegram channel. Coins have been returned. Check bot permissions and server configuration."}), 502
     return jsonify({"ok": True, "message": f"Withdrawal request #{withdrawal_id} sent for manual review."})
-
 
 @app.get("/api/join-status")
 @require_user
