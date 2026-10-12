@@ -37,7 +37,7 @@
       <section class="game-panel" id="game-maze" hidden>
         <div class="game-top"><h3>🌀 Maze Escape</h3><button class="secondary" data-close-game>Close</button></div>
         <p>Move the ball to the green exit using the arrows.</p><div id="maze-board" class="maze-board"></div>
-        <div class="maze-controls"><button data-move="up">↑</button><div><button data-move="left">←</button><button data-move="down">↓</button><button data-move="right">→</button></div></div><p class="game-feedback" id="maze-feedback"></p>
+        <div class="maze-controls"><button data-move="up">↑</button><div><button data-move="left">←</button><button data-move="down">↓</button><button data-move="right">→</button></div></div><p class="game-feedback" id="maze-feedback"></p><button class="secondary full" id="maze-new-game">New game</button>
       </section>
       <section class="game-panel" id="game-village" hidden>
         <div class="game-top"><h3>🏡 Find the Objects</h3><button class="secondary" data-close-game>Close</button></div>
@@ -100,6 +100,7 @@
     <p id="maze-reward-message" class="reward-message"></p>
   </div>
 </div>
+<div id="incorrect-modal" class="reward-modal" hidden><div class="reward-backdrop"></div><div class="reward-dialog incorrect-dialog" role="dialog" aria-modal="true"><div class="reward-coin">❌</div><h2>Incorrect!</h2><p id="incorrect-message">That wasn't the right choice.</p><div class="reward-actions"><button id="incorrect-retry" class="reward-claim">Retry</button><button id="incorrect-cancel" class="reward-skip">Cancel</button></div></div></div>
 <div id="toast" class="toast" role="status"></div>
 <script src="/static/app.js"></script>
 </body></html>
