@@ -249,5 +249,3 @@ function newVillage(){
   scene.append(item);
  });
 }
-
-$("village-reset")?.addEventListener("click",()=>{newVillage();});
