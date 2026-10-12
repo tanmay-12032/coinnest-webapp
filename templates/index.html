@@ -15,7 +15,7 @@
     <div class="rupee" id="rupee-balance">Loading balance…</div>
     <div class="hero-bottom"><span>100 coins = ₹1</span><span class="dot"></span><span id="ads-count">0/25 ads today</span></div>
   </section>
-  <nav class="tabs"><button class="tab active" data-tab="home">⌂ <span>Home</span></button><button class="tab" data-tab="wallet">▣ <span>Wallet</span></button><button class="tab" data-tab="profile">♙ <span>Profile</span></button></nav>
+  <nav class="tabs"><button class="tab active" data-tab="home">⌂ <span>Home</span></button><button class="tab" data-tab="wallet">▣ <span>Wallet</span></button><button class="tab" data-tab="refer">↗ <span>Refer</span></button><button class="tab" data-tab="profile">♙ <span>Profile</span></button></nav>
   <main>
     <section class="panel active" id="panel-home">
       <div class="section-head"><div><h2>Earn coins</h2><p>Watch verified ads to collect rewards.</p></div><div class="coin-icon">✦</div></div>
@@ -37,6 +37,14 @@
       <div id="withdraw-result" class="result" hidden></div>
       <div class="section-head history-head"><div><h2>Request history</h2></div></div>
       <div id="wallet-history" class="history empty">No withdrawal requests yet.</div>
+    </section>
+    <section class="panel" id="panel-refer">
+      <div class="section-head"><div><h2>Refer & Earn</h2><p>Invite friends to CoinNest</p></div><div class="coin-icon">🎁</div></div>
+      <div class="ref-hero"><span>Referral rewards</span><strong>20% commission + 50 coins</strong><small>Per eligible referral after 5 verified ads</small></div>
+      <div class="ref-stats"><div><small>Total referrals</small><b id="ref-total">—</b></div><div><small>Completed</small><b id="ref-completed">—</b></div><div><small>Bonus coins</small><b id="ref-bonus">—</b></div></div>
+      <label for="ref-link">Your personal referral link</label><input id="ref-link" readonly placeholder="Loading your referral link…">
+      <button class="primary full" id="copy-ref">Copy referral link</button>
+      <div class="notice" id="ref-note">Referral rewards are credited only after verified ad events are connected. Opening or clicking an ad does not count as a completed view.</div>
     </section>
     <section class="panel" id="panel-profile">
       <div class="profile-card"><div class="avatar" id="avatar">C</div><div><h2 id="profile-name">Loading profile…</h2><p id="profile-username">@username</p><small id="profile-id">Telegram ID: —</small></div></div>
