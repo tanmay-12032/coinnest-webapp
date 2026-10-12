@@ -46,6 +46,12 @@ def init_db():
         conn.execute("""CREATE TABLE IF NOT EXISTS balance_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT, target_id TEXT NOT NULL, admin_id TEXT NOT NULL,
             delta INTEGER NOT NULL, note TEXT NOT NULL, created_at INTEGER NOT NULL)""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS pending_referrals (
+            referred_id TEXT PRIMARY KEY, referrer_id TEXT NOT NULL, created_at INTEGER NOT NULL)""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS referrals (
+            referred_id TEXT PRIMARY KEY, referrer_id TEXT NOT NULL, created_at INTEGER NOT NULL,
+            verified_ads INTEGER NOT NULL DEFAULT 0, completed INTEGER NOT NULL DEFAULT 0,
+            bonus_paid INTEGER NOT NULL DEFAULT 0, commission_coins INTEGER NOT NULL DEFAULT 0)""")
         # The configured owner is always an admin.
         conn.execute("INSERT OR IGNORE INTO admins(telegram_id, added_by, created_at) VALUES(?,?,?)",
                      (OWNER_ADMIN_ID, OWNER_ADMIN_ID, int(time.time())))
@@ -154,10 +160,18 @@ def require_user(fn):
         with db() as conn:
             if conn.execute("SELECT 1 FROM banned_users WHERE telegram_id=?", (user["telegram_id"],)).fetchone():
                 return jsonify({"error": "Your account is banned."}), 403
+            existed = conn.execute("SELECT 1 FROM users WHERE telegram_id=?", (user["telegram_id"],)).fetchone()
             conn.execute("""INSERT INTO users(telegram_id, username, first_name, last_name, created_at)
                 VALUES(?,?,?,?,?) ON CONFLICT(telegram_id) DO UPDATE SET
                 username=excluded.username, first_name=excluded.first_name, last_name=excluded.last_name""",
                 (user["telegram_id"], user["username"], user["first_name"], user["last_name"], int(time.time())))
+            if not existed and user["telegram_id"] != "demo-user":
+                pending = conn.execute("SELECT referrer_id FROM pending_referrals WHERE referred_id=?",
+                                       (user["telegram_id"],)).fetchone()
+                if pending and pending["referrer_id"] != user["telegram_id"]:
+                    conn.execute("INSERT OR IGNORE INTO referrals(referred_id, referrer_id, created_at) VALUES(?,?,?)",
+                                 (user["telegram_id"], pending["referrer_id"], int(time.time())))
+                conn.execute("DELETE FROM pending_referrals WHERE referred_id=?", (user["telegram_id"],))
         if request.path != "/api/join-status":
             missing = join_status(user["telegram_id"])
             if missing:
@@ -283,6 +297,28 @@ def withdraw():
 def api_join_status():
     user = request.user_data
     return jsonify({"required_channels": join_status(user["telegram_id"])})
+
+@app.get("/api/referrals")
+@require_user
+def referral_stats():
+    user = request.user_data
+    if user["telegram_id"] == "demo-user":
+        return jsonify({"referral_link": "", "total": 0, "completed": 0, "bonus_coins": 0,
+                        "commission_coins": 0, "note": "Open from Telegram to get your personal referral link."})
+    with db() as conn:
+        rows = conn.execute("SELECT completed, bonus_paid, commission_coins FROM referrals WHERE referrer_id=?",
+                            (user["telegram_id"],)).fetchall()
+    total = len(rows)
+    completed = sum(int(r["completed"]) for r in rows)
+    bonuses = sum(50 for r in rows if int(r["bonus_paid"]))
+    commissions = sum(int(r["commission_coins"]) for r in rows)
+    link = f"https://t.me/{BOT_USERNAME}?start=ref_{user['telegram_id']}"
+    return jsonify({"referral_link": link, "total": total, "completed": completed,
+                    "bonus_coins": bonuses, "commission_coins": commissions,
+                    "commission_percent": 20, "bonus_per_completed_referral": 50,
+                    "ads_required": 5,
+                    "note": "Referral attribution is enabled. Bonus/commission payouts stay disabled until AdsGram server-side reward verification is configured."})
+
 
 @app.get("/api/admin/status")
 @admin_required
@@ -467,6 +503,16 @@ def telegram_webhook():
 
     command = text.split()[0].split("@", 1)[0].lower()
     if command == "/start":
+        parts = text.split(maxsplit=1)
+        if len(parts) > 1 and parts[1].startswith("ref_"):
+            referrer_id = parts[1][4:].strip()
+            if referrer_id.isdigit() and referrer_id != sender_id and sender_id.isdigit():
+                with db() as conn:
+                    existing_user = conn.execute("SELECT 1 FROM users WHERE telegram_id=?", (sender_id,)).fetchone()
+                    existing_ref = conn.execute("SELECT 1 FROM referrals WHERE referred_id=?", (sender_id,)).fetchone()
+                    if not existing_user and not existing_ref:
+                        conn.execute("INSERT OR IGNORE INTO pending_referrals(referred_id, referrer_id, created_at) VALUES(?,?,?)",
+                                     (sender_id, referrer_id, int(time.time())))
         keyboard = [[{"text": "🪙 Open CoinNest", "web_app": {"url": PUBLIC_URL + "/"}}]]
         send_bot_reply(chat_id,
                        "Welcome to CoinNest! 🪙\nOpen the Mini App below to view your rewards and wallet.",
