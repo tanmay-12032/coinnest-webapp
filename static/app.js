@@ -67,10 +67,10 @@ $("watch-btn").addEventListener("click", async () => {
     adController = adController || window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
     btn.disabled = true; btn.textContent = "Loading ad…";
     await adController.show();
-    // AdsGram's rewarded SDK resolves after the rewarded ad completes.
-    const data = await api("/api/claim-ad", { method: "POST", body: "{}" });
-    toast(data.message || "Reward added!");
-    await refresh();
+    // Coin credit is handled by AdsGram's server-to-server Reward URL callback.
+    // Do not also call /api/claim-ad here, or one completed ad could pay twice.
+    toast("Ad completed! Reward is being confirmed by AdsGram.");
+    window.setTimeout(() => refresh(), 1800);
   } catch (e) {
     toast(e.message || "Ad was not completed. No coins were added.");
   } finally {
