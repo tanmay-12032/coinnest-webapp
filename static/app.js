@@ -263,3 +263,6 @@ function newVillage(){
   scene.append(item);
  });
 }
+
+// Ensure the village challenge reset button is wired up.
+document.getElementById("village-reset")?.addEventListener("click", () => newVillage());
