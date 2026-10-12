@@ -35,6 +35,10 @@ def init_db():
         conn.execute("""CREATE TABLE IF NOT EXISTS ad_claims (
             id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_id TEXT NOT NULL, day TEXT NOT NULL,
             created_at INTEGER NOT NULL)""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS game_rewards (
+            telegram_id TEXT NOT NULL, game TEXT NOT NULL, day TEXT NOT NULL,
+            coins INTEGER NOT NULL, created_at INTEGER NOT NULL,
+            PRIMARY KEY (telegram_id, game, day))""")
         conn.execute("""CREATE TABLE IF NOT EXISTS admins (
             telegram_id TEXT PRIMARY KEY, added_by TEXT NOT NULL, created_at INTEGER NOT NULL)""")
         conn.execute("""CREATE TABLE IF NOT EXISTS banned_users (
@@ -213,6 +217,35 @@ def me():
                                (user["telegram_id"],)).fetchall()
     return jsonify({"user": user, "balance": row["balance"], "ads_today": ads,
                     "withdrawals": [dict(x) for x in history]})
+
+@app.post("/api/claim-game-reward")
+@require_user
+def claim_game_reward():
+    """Award the maze reward once per user per day."""
+    user = request.user_data
+    if user["telegram_id"] == "demo-user":
+        return jsonify({"error": "Open CoinNest inside Telegram to claim real coins."}), 401
+    payload = request.get_json(silent=True) or {}
+    game = str(payload.get("game", "")).strip()
+    if game != "maze":
+        return jsonify({"error": "Unknown game reward."}), 400
+    day = time.strftime("%Y-%m-%d", time.localtime())
+    now = int(time.time())
+    reward = 5
+    with db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(
+                "INSERT INTO game_rewards(telegram_id, game, day, coins, created_at) VALUES(?,?,?,?,?)",
+                (user["telegram_id"], game, day, reward, now))
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            return jsonify({"error": "Maze reward already claimed today."}), 409
+        conn.execute("UPDATE users SET balance=balance+? WHERE telegram_id=?",
+                     (reward, user["telegram_id"]))
+        conn.commit()
+    return jsonify({"ok": True, "coins_added": reward, "message": "5 coins added to your balance!"})
+
 
 @app.post("/api/claim-ad")
 @require_user
