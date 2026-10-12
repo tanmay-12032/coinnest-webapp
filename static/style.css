@@ -104,3 +104,26 @@ footer{color:#7184a7}.toast{background:#101a31;border:1px solid rgba(0,234,255,.
 .withdraw-methods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:15px 0 12px}
 .method-option{border:1px solid rgba(105,210,255,.25);border-radius:12px;padding:12px 5px;background:rgba(12,20,40,.8);color:#a8c9e5;font:700 12px 'DM Sans';cursor:pointer}
 .method-option.active{border-color:#40d8ff;background:linear-gradient(135deg,rgba(18,119,155,.32),rgba(83,72,180,.4));color:#fff;box-shadow:0 0 14px rgba(64,216,255,.15)}
+
+/* Fixed bottom navigation: keep it anchored above Android safe area. */
+html, body { min-height: 100%; }
+body { padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px)) !important; }
+.neon-tabs {
+  position: fixed !important;
+  left: 12px !important;
+  right: 12px !important;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+  top: auto !important;
+  z-index: 9999 !important;
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 5px !important;
+  padding: 8px !important;
+  border: 1px solid #24465e !important;
+  border-radius: 24px !important;
+  background: rgba(7, 12, 28, .96) !important;
+  box-shadow: 0 0 22px rgba(0, 207, 255, .12) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.neon-tabs .tab { min-width: 0; }
