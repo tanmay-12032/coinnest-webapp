@@ -63,3 +63,20 @@ footer{color:#7184a7}.toast{background:#101a31;border:1px solid rgba(0,234,255,.
 .ref-stats small{font-size:10px;color:#9eacc8}.ref-stats b{font-size:17px;color:#76edff}
 #ref-link{background:#0e1727;color:#b6efff;border-color:#334c6b}
 @media(max-width:360px){.ref-hero strong{font-size:17px}.village-scene{gap:3px;padding:6px}}
+
+
+/* Maze reward modal */
+.reward-modal{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:24px}
+.reward-modal[hidden]{display:none}
+.reward-backdrop{position:absolute;inset:0;background:rgba(2,5,18,.78);backdrop-filter:blur(8px)}
+.reward-dialog{position:relative;width:min(100%,360px);padding:28px 20px 22px;text-align:center;border:1px solid #d6a93d;border-radius:24px;background:radial-gradient(circle at 50% 0,#82601e55,transparent 48%),linear-gradient(145deg,#171729,#090d1c);box-shadow:0 0 20px #ffc83d55,0 0 55px #8b5cff22;animation:reward-pop .22s ease-out}
+.reward-coin{font-size:36px;margin-bottom:8px;filter:drop-shadow(0 0 12px #ffd34d99)}
+.reward-dialog h2{margin:0;color:#ffe7a0;font:800 23px Manrope;text-shadow:0 0 14px #ffcf4a55}
+.reward-dialog>p{font-size:12px;color:#aeb9d2;margin:10px 0 20px}
+.reward-actions{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+.reward-claim{padding:14px 16px;border:1px solid #ffe18a;border-radius:13px;background:linear-gradient(135deg,#fff0a3,#ffbd2e 55%,#e88c10);color:#332100;font-weight:900;box-shadow:0 0 20px #ffbe2e55}
+.reward-skip{padding:13px 15px;border:1px solid #4a526d;border-radius:13px;background:#171d30;color:#c4cee3;font-weight:700}
+.reward-claim:disabled{opacity:.65}
+.reward-dialog .reward-message{min-height:15px;margin:12px 0 0;color:#ffcf7a;font-size:12px}
+.reward-dialog .reward-message.success{color:#78f4c5}
+@keyframes reward-pop{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}

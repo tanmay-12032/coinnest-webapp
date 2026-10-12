@@ -120,7 +120,7 @@ loadReferrals();
 document.querySelectorAll("[data-game]").forEach(btn=>btn.addEventListener("click",()=>{
   document.querySelectorAll(".game-panel").forEach(p=>p.hidden=true);
   const panel=$("game-"+btn.dataset.game); if(panel) panel.hidden=false;
-  if(btn.dataset.game==="maze") drawMaze();
+  if(btn.dataset.game==="maze"){ball={r:1,c:1};mazeRewardPrompted=false;$("maze-feedback").textContent="";drawMaze();}
   if(btn.dataset.game==="village") newVillage();
 }));
 document.querySelectorAll("[data-close-game]").forEach(btn=>btn.addEventListener("click",()=>{
@@ -151,6 +151,7 @@ $("math-start")?.addEventListener("click",()=>{mathScore=0;mathRound=0;$("math-f
 // Small fixed maze; # are walls, S is start, E is exit.
 const mazeMap=["#########","#S#.....#","#.#.###.#","#...#...#","###.#.#E#","#.....#.#","#########"];
 let ball={r:1,c:1};
+let mazeRewardPrompted=false;
 function drawMaze(){
   const board=$("maze-board"); if(!board)return;board.innerHTML="";
   mazeMap.forEach((row,r)=>[...row].forEach((cell,c)=>{
@@ -165,8 +166,36 @@ function moveBall(dir){
   const r=ball.r+delta[0],c=ball.c+delta[1];
   if(!mazeMap[r]||mazeMap[r][c]==="#"||!mazeMap[r][c])return;
   ball={r,c};drawMaze();
-  if(mazeMap[r][c]==="E")$("maze-feedback").textContent="You escaped the maze! 🎉";
+  if(mazeMap[r][c]==="E"){
+    $("maze-feedback").textContent="You escaped the maze! 🎉";
+    if(!mazeRewardPrompted){mazeRewardPrompted=true;openMazeReward();}
+  }
 }
+function openMazeReward(){
+  const modal=$("maze-reward-modal");
+  if(!modal)return;
+  $("maze-reward-message").textContent="";
+  $("maze-claim").disabled=false;
+  $("maze-claim").textContent="Claim 5 coins";
+  modal.hidden=false;
+}
+function closeMazeReward(){ $("maze-reward-modal").hidden=true; }
+$("maze-skip")?.addEventListener("click",closeMazeReward);
+$("maze-claim")?.addEventListener("click",async()=>{
+  const btn=$("maze-claim");
+  btn.disabled=true;btn.textContent="Claiming…";
+  try{
+    const result=await api("/api/claim-game-reward",{method:"POST",body:JSON.stringify({game:"maze"})});
+    $("maze-reward-message").textContent=result.message||"5 coins added to your balance!";
+    $("maze-reward-message").classList.add("success");
+    await refresh();
+    btn.textContent="Claimed ✓";
+    setTimeout(closeMazeReward,1200);
+  }catch(e){
+    $("maze-reward-message").textContent=e.message;
+    btn.disabled=false;btn.textContent="Try claim again";
+  }
+});
 document.querySelectorAll("[data-move]").forEach(b=>b.addEventListener("click",()=>moveBall(b.dataset.move)));
 document.addEventListener("keydown",e=>{if(!$("game-maze")?.hidden){const d={ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right"}[e.key];if(d){e.preventDefault();moveBall(d)}}});
 
