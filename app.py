@@ -634,7 +634,7 @@ def telegram_webhook():
                     if not existing_user and not existing_ref:
                         conn.execute("INSERT OR IGNORE INTO pending_referrals(referred_id, referrer_id, created_at) VALUES(?,?,?)",
                                      (sender_id, referrer_id, int(time.time())))
-        keyboard = [[{"text": "🪙 Open CoinNest", "web_app": {"url": PUBLIC_URL + "/"}}]]
+        keyboard = [[{"text": "🪙 Open CoinNest", "web_app": {"url": UBLIC_URL + "/"}}]]
         send_bot_reply(chat_id,
                        "Welcome to CoinNest! 🪙\nOpen the Mini App below to view your rewards and wallet.",
                        keyboard)
@@ -642,7 +642,7 @@ def telegram_webhook():
         if sender_id != OWNER_ADMIN_ID:
             send_bot_reply(chat_id, "Your not admin 🚫")
         else:
-            keyboard = [[{"text": "🔐 Open Admin Panel", "web_app": {"url": PUBLIC_URL + "/adminpanel"}}]]
+            keyboard = [[{"text": "🔐 Open Admin Panel", "web_app": {"url": UBLIC_URL + "/adminpanel"}}]]
             send_bot_reply(chat_id, "Admin access verified. Open your admin panel below.", keyboard)
     return jsonify({"ok": True})
 
