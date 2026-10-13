@@ -6,9 +6,8 @@ requires-python = ">=3.11"
 dependencies = [
     "flask",
     "requests",
-    "psycopg2[binary]",
+    "psycopg2-binary",
 ]
 
 [tool.vercel]
 entrypoint = "app:app"
-
