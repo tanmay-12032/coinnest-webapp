@@ -48,10 +48,10 @@ document.querySelectorAll(".tab").forEach(btn=>btn.addEventListener("click",()=>
   document.querySelectorAll(".panel").forEach(x=>x.classList.toggle("active",x.id==="panel-"+btn.dataset.tab));
 }));
 // Replace this with the numeric Reward block ID from your AdsGram publisher dashboard.
-const ADSGRAM_BLOCK_ID = "53589";
+const ADSGRAM_BLOCK_ID = "YOUR_ADSGRAM_BLOCK_ID";
 let adController = null;
 try {
-  if (window.Adsgram && ADSGRAM_BLOCK_ID !== "53589") {
+  if (window.Adsgram && ADSGRAM_BLOCK_ID !== "YOUR_ADSGRAM_BLOCK_ID") {
     adController = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
   }
 } catch (e) { console.error("AdsGram initialization failed", e); }
@@ -67,10 +67,10 @@ $("watch-btn").addEventListener("click", async () => {
     adController = adController || window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
     btn.disabled = true; btn.textContent = "Loading ad…";
     await adController.show();
-    // Coin credit is handled by AdsGram's server-to-server Reward URL callback.
-    // Do not also call /api/claim-ad here, or one completed ad could pay twice.
-    toast("Ad completed! Reward is being confirmed by AdsGram.");
-    window.setTimeout(() => refresh(), 1800);
+    // AdsGram's rewarded SDK resolves after the rewarded ad completes.
+    const data = await api("/api/claim-ad", { method: "POST", body: "{}" });
+    toast(data.message || "Reward added!");
+    await refresh();
   } catch (e) {
     toast(e.message || "Ad was not completed. No coins were added.");
   } finally {
