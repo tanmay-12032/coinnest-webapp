@@ -1,3 +1,14 @@
 
+[project]
+name = "coinnest"
+version = "1.0.0"
+requires-python = ">=3.11"
+dependencies = [
+    "flask",
+    "requests",
+    "psycopg[binary]",
+]
+
 [tool.vercel]
 entrypoint = "app:app"
+
