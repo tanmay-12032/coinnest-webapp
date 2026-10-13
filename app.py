@@ -1,11 +1,13 @@
-import os, json, hmac, hashlib, sqlite3, time
+import os, json, hmac, hashlib, time
 from urllib.parse import parse_qsl
 from functools import wraps
 import requests
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
-DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "coinnest.db"))
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "CoinNest_bot").strip().lstrip("@")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "").strip()
@@ -18,10 +20,37 @@ OWNER_ADMIN_ID = os.environ.get("OWNER_ADMIN_ID", "1849699189").strip()
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "https://coinnest-webapp.onrender.com").strip().rstrip("/")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "").strip()
 ADSGRAM_REWARD_SECRET = os.environ.get("ADSGRAM_REWARD_SECRET", "").strip()
+class DBConnection:
+    """Small compatibility wrapper for the existing SQL call style, backed by PostgreSQL."""
+    def __init__(self):
+        if not DATABASE_URL:
+            raise RuntimeError("DATABASE_URL is missing. Connect Neon PostgreSQL in Vercel Environment Variables.")
+        self.conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor, connect_timeout=10)
+    def execute(self, sql, params=None):
+        sql = sql.replace("BEGIN IMMEDIATE", "BEGIN")
+        sql = sql.replace("INSERT OR IGNORE INTO", "INSERT INTO")
+        if "INSERT INTO admins(telegram_id, added_by, created_at)" in sql or "INSERT INTO referrals(referred_id, referrer_id, created_at)" in sql or "INSERT INTO pending_referrals(referred_id, referrer_id, created_at)" in sql:
+            if "ON CONFLICT" not in sql.upper(): sql += " ON CONFLICT DO NOTHING"
+        if "INSERT OR REPLACE INTO required_channels" in sql:
+            sql = sql.replace("INSERT OR REPLACE INTO", "INSERT INTO") + " ON CONFLICT (channel_id) DO UPDATE SET title=EXCLUDED.title, join_url=EXCLUDED.join_url, created_by=EXCLUDED.created_by, created_at=EXCLUDED.created_at"
+        elif "INSERT OR REPLACE INTO banned_users" in sql:
+            sql = sql.replace("INSERT OR REPLACE INTO", "INSERT INTO") + " ON CONFLICT (telegram_id) DO UPDATE SET reason=EXCLUDED.reason, banned_by=EXCLUDED.banned_by, created_at=EXCLUDED.created_at"
+        sql = sql.replace("?", "%s")
+        cur = self.conn.cursor()
+        cur.execute(sql, params or ())
+        return cur
+    def commit(self): self.conn.commit()
+    def rollback(self): self.conn.rollback()
+    def close(self): self.conn.close()
+    def __enter__(self): return self
+    def __exit__(self, typ, value, tb):
+        try:
+            if typ is None: self.conn.commit()
+            else: self.conn.rollback()
+        finally: self.conn.close()
+
 def db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return DBConnection()
 
 def init_db():
     with db() as conn:
@@ -29,23 +58,23 @@ def init_db():
             telegram_id TEXT PRIMARY KEY, username TEXT, first_name TEXT, last_name TEXT,
             balance INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)""")
         conn.execute("""CREATE TABLE IF NOT EXISTS withdrawals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_id TEXT NOT NULL,
+            id BIGSERIAL PRIMARY KEY, telegram_id TEXT NOT NULL,
             amount_rupees INTEGER NOT NULL, amount_coins INTEGER NOT NULL, upi_id TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL)""")
-        existing_cols = {r[1] for r in conn.execute("PRAGMA table_info(withdrawals)").fetchall()}
-        for col, definition in (("method", "TEXT NOT NULL DEFAULT 'payz'"), ("payout_id", "TEXT NOT NULL DEFAULT ''"), ("amount_value", "REAL NOT NULL DEFAULT 0")):
+        existing_cols = {r["column_name"] for r in conn.execute("SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='withdrawals'").fetchall()}
+        for col, definition in (("method", "TEXT NOT NULL DEFAULT 'payz'"), ("payout_id", "TEXT NOT NULL DEFAULT ''"), ("amount_value", "DOUBLE PRECISION NOT NULL DEFAULT 0")):
             if col not in existing_cols:
                 conn.execute(f"ALTER TABLE withdrawals ADD COLUMN {col} {definition}")
         conn.execute("UPDATE withdrawals SET payout_id=upi_id WHERE payout_id='' AND upi_id IS NOT NULL")
         conn.execute("""CREATE TABLE IF NOT EXISTS ad_claims (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_id TEXT NOT NULL, day TEXT NOT NULL,
+            id BIGSERIAL PRIMARY KEY, telegram_id TEXT NOT NULL, day TEXT NOT NULL,
             created_at INTEGER NOT NULL)""")
         conn.execute("""CREATE TABLE IF NOT EXISTS game_rewards (
             telegram_id TEXT NOT NULL, game TEXT NOT NULL, day TEXT NOT NULL,
             coins INTEGER NOT NULL, created_at INTEGER NOT NULL,
             PRIMARY KEY (telegram_id, game, day))""")
         conn.execute("""CREATE TABLE IF NOT EXISTS game_reward_claims (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_id TEXT NOT NULL,
+            id BIGSERIAL PRIMARY KEY, telegram_id TEXT NOT NULL,
             game TEXT NOT NULL, coins INTEGER NOT NULL, created_at INTEGER NOT NULL)""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_game_reward_claims_user_time ON game_reward_claims(telegram_id, created_at)")
         conn.execute("""CREATE TABLE IF NOT EXISTS admins (
@@ -57,7 +86,7 @@ def init_db():
             channel_id TEXT PRIMARY KEY, title TEXT NOT NULL, join_url TEXT NOT NULL,
             created_by TEXT NOT NULL, created_at INTEGER NOT NULL)""")
         conn.execute("""CREATE TABLE IF NOT EXISTS balance_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, target_id TEXT NOT NULL, admin_id TEXT NOT NULL,
+            id BIGSERIAL PRIMARY KEY, target_id TEXT NOT NULL, admin_id TEXT NOT NULL,
             delta INTEGER NOT NULL, note TEXT NOT NULL, created_at INTEGER NOT NULL)""")
         conn.execute("""CREATE TABLE IF NOT EXISTS pending_referrals (
             referred_id TEXT PRIMARY KEY, referrer_id TEXT NOT NULL, created_at INTEGER NOT NULL)""")
@@ -362,9 +391,9 @@ def withdraw():
         if not row or row["balance"] < coins:
             conn.rollback()
             return jsonify({"error": "Insufficient coin balance."}), 400
-        cur=conn.execute("INSERT INTO withdrawals(telegram_id, amount_rupees, amount_coins, upi_id, created_at, method, payout_id, amount_value) VALUES(?,?,?,?,?,?,?,?)",
+        cur=conn.execute("INSERT INTO withdrawals(telegram_id, amount_rupees, amount_coins, upi_id, created_at, method, payout_id, amount_value) VALUES(?,?,?,?,?,?,?,?) RETURNING id",
             (user["telegram_id"], amount_rupees, coins, payout_id, now, method, payout_id, amount_value))
-        withdrawal_id=cur.lastrowid
+        withdrawal_id=cur.fetchone()["id"]
         conn.execute("UPDATE users SET balance=balance-? WHERE telegram_id=?", (coins, user["telegram_id"]))
         conn.commit()
     safe_name=f"{user.get('first_name','')} {user.get('last_name','')}".strip() or "Unknown"
