@@ -1,0 +1,3 @@
+
+[tool.vercel]
+entrypoint = "coinnest_app_updated:app"
