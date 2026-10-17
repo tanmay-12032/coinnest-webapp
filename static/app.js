@@ -47,32 +47,45 @@ document.querySelectorAll(".tab").forEach(btn=>btn.addEventListener("click",()=>
   document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===btn));
   document.querySelectorAll(".panel").forEach(x=>x.classList.toggle("active",x.id==="panel-"+btn.dataset.tab));
 }));
-// Replace this with the numeric Reward block ID from your AdsGram publisher dashboard.
-const ADSGRAM_BLOCK_ID = "53896";
-let adController = null;
-try {
-  if (window.Adsgram && ADSGRAM_BLOCK_ID !== "53896") {
-    adController = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
-  }
-} catch (e) { console.error("AdsGram initialization failed", e); }
+// Monetag SDK loader. Use the zone ID and script URL supplied by Monetag.
+let monetagConfig = null;
+let monetagLoadPromise = null;
+async function loadMonetag() {
+  if (monetagLoadPromise) return monetagLoadPromise;
+  monetagLoadPromise = (async () => {
+    monetagConfig = await api("/api/config");
+    const zone = String(monetagConfig.monetag_zone_id || "12053770").trim();
+    const sdkUrl = String(monetagConfig.monetag_sdk_url || "").trim();
+    if (!sdkUrl) throw new Error("Add MONETAG_SDK_URL from your Monetag dashboard in Vercel.");
+    const sdkName = `show_${zone}`;
+    if (typeof window[sdkName] === "function") return sdkName;
+    await new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = sdkUrl; script.async = true;
+      script.dataset.coinnestMonetag = zone;
+      script.onload = resolve;
+      script.onerror = () => reject(new Error("Monetag SDK failed to load. Check MONETAG_SDK_URL."));
+      document.head.appendChild(script);
+    });
+    if (typeof window[sdkName] !== "function") throw new Error(`Monetag function ${sdkName} was not created. Check the exact SDK script from Monetag.`);
+    return sdkName;
+  })();
+  try { return await monetagLoadPromise; }
+  catch (e) { monetagLoadPromise = null; throw e; }
+}
 
 $("watch-btn").addEventListener("click", async () => {
   const btn = $("watch-btn");
-  if (ADSGRAM_BLOCK_ID === "YOUR_ADSGRAM_BLOCK_ID") {
-    toast("Add your AdsGram Reward Block ID in static/app.js first.");
-    return;
-  }
-  if (!window.Adsgram) { toast("AdsGram script is not loaded. Please retry."); return; }
+  btn.disabled = true; btn.textContent = "Loading ad…";
   try {
-    adController = adController || window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
-    btn.disabled = true; btn.textContent = "Loading ad…";
-    await adController.show();
-    // AdsGram's rewarded SDK resolves after the rewarded ad completes.
-    const data = await api("/api/claim-ad", { method: "POST", body: "{}" });
-    toast(data.message || "Reward added!");
+    const sdkName = await loadMonetag();
+    // Matches the Monetag snippet provided by the user: show_12053770('pop').
+    await window[sdkName]("pop");
+    const result = await api("/api/monetag/claim", { method: "POST", body: JSON.stringify({ format: "pop" }) });
+    toast(`Ad flow completed. ${result.reward} coins added.`);
     await refresh();
   } catch (e) {
-    toast(e.message || "Ad was not completed. No coins were added.");
+    toast(e.message || "Ad was unavailable or did not complete. No coins were added.");
   } finally {
     btn.disabled = false; btn.textContent = "Watch ads";
   }
