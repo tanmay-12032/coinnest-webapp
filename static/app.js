@@ -47,37 +47,41 @@ document.querySelectorAll(".tab").forEach(btn=>btn.addEventListener("click",()=>
   document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===btn));
   document.querySelectorAll(".panel").forEach(x=>x.classList.toggle("active",x.id==="panel-"+btn.dataset.tab));
 }));
-// Monetag SDK loader with a bounded wait so the UI cannot stay on "Loading ad…" forever.
-let monetagConfig = null;
+// Monetag SDK loader: use the dashboard-provided zone directly and report useful diagnostics.
 let monetagLoadPromise = null;
 async function loadMonetag() {
   if (monetagLoadPromise) return monetagLoadPromise;
   monetagLoadPromise = (async () => {
-    monetagConfig = await api("/api/config");
-    const zone = String(monetagConfig.monetag_zone_id || "12053770").trim();
-    const sdkUrl = String(monetagConfig.monetag_sdk_url || "https://libtl.com/sdk.js").trim();
+    const zone = "12053770";
     const sdkName = `show_${zone}`;
     if (typeof window[sdkName] === "function") return sdkName;
 
     let script = document.querySelector(`script[data-sdk="${sdkName}"]`);
     if (!script) {
       script = document.createElement("script");
-      script.src = sdkUrl;
+      script.src = "https://libtl.com/sdk.js";
       script.async = true;
       script.dataset.zone = zone;
       script.dataset.sdk = sdkName;
+      script.onerror = () => { script.dataset.loadFailed = "true"; };
       document.head.appendChild(script);
     }
 
-    // Poll instead of relying only on a load event: the script may have loaded
-    // before this button was clicked, which otherwise can leave the UI hanging.
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline) {
       if (typeof window[sdkName] === "function") return sdkName;
-      if (script.dataset.loadFailed === "true") break;
-      await new Promise(resolve => setTimeout(resolve, 150));
+      if (script.dataset.loadFailed === "true") {
+        throw new Error("Monetag SDK script could not load. Check your connection, content blocker, and Monetag integration settings.");
+      }
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
-    throw new Error("Monetag SDK did not initialize. Check the zone/script and try opening CoinNest in Telegram again.");
+    console.error("Monetag SDK diagnostics", {
+      scriptSrc: script.src,
+      scriptLoadedEventSeen: script.dataset.loadFailed !== "true",
+      sdkFunctionType: typeof window[sdkName],
+      userAgent: navigator.userAgent
+    });
+    throw new Error("Monetag script did not expose show_12053770. Check Monetag zone setup and whether Telegram/network blocking prevents the SDK from running.");
   })();
   try { return await monetagLoadPromise; }
   catch (e) { monetagLoadPromise = null; throw e; }
