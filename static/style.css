@@ -127,19 +127,22 @@ body { padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px)) !important
   -webkit-backdrop-filter: blur(14px);
 }
 .neon-tabs .tab { min-width: 0; }
-/* Keep ad status message above the menu */
+/* Monetag status message - keep above bottom navigation */
 #monetag-status {
-  position: fixed;
-  top: 80px;
-  left: 50%;
+  position: fixed !important;
+  top: auto !important;
+  bottom: 100px !important;
+  left: 50% !important;
   transform: translateX(-50%);
-  z-index: 99999;
+  z-index: 999999 !important;
+
   width: calc(100% - 32px);
   max-width: 400px;
+  box-sizing: border-box;
+
   padding: 12px 16px;
   border-radius: 12px;
-  background: #202020;
-  color: #ffffff;
+  background: #202a40;
+  color: #fff;
   text-align: center;
-  box-sizing: border-box;
 }
