@@ -1,4 +1,4 @@
-import os, json, hmac, hashlib, time
+import os, json, hmac, hashlib, time, uuid
 from urllib.parse import parse_qsl
 from functools import wraps
 import requests
@@ -11,15 +11,16 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "CoinNest_bot").strip().lstrip("@")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "").strip()
-DEMO_MODE = os.environ.get("DEMO_MODE", "0") == "1"
+DEMO_MODE = os.environ.get("DEMO_MODE", "1") == "1"
 COINS_PER_RUPEE = 100
 COINS_PER_AD = 10
 DAILY_AD_LIMIT = 25
 MIN_WITHDRAW_RUPEES = 10
 OWNER_ADMIN_ID = os.environ.get("OWNER_ADMIN_ID", "1849699189").strip()
-PUBLIC_URL = os.environ.get("PUBLIC_URL", "https://coinnest-webapp.vercel.app").strip().rstrip("/")
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "https://coinnest-webapp.onrender.com").strip().rstrip("/")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "").strip()
-ADSGRAM_REWARD_SECRET = os.environ.get("ADSGRAM_REWARD_SECRET", "").strip()
+MONETAG_ZONE_ID = os.environ.get("MONETAG_ZONE_ID", "").strip()
+MONETAG_SDK_URL = os.environ.get("MONETAG_SDK_URL", "").strip()
 class DBConnection:
     """Small compatibility wrapper for the existing SQL call style, backed by PostgreSQL."""
     def __init__(self):
@@ -69,8 +70,13 @@ def init_db():
         conn.execute("""CREATE TABLE IF NOT EXISTS ad_claims (
             id BIGSERIAL PRIMARY KEY, telegram_id TEXT NOT NULL, day TEXT NOT NULL,
             created_at INTEGER NOT NULL)""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS ad_reward_events (
-            event_id TEXT PRIMARY KEY, telegram_id TEXT NOT NULL, created_at INTEGER NOT NULL)""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS monetag_ad_sessions (
+            ymid TEXT PRIMARY KEY, telegram_id TEXT NOT NULL, created_at BIGINT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending')""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS monetag_reward_events (
+            ymid TEXT PRIMARY KEY, telegram_id TEXT NOT NULL, event_type TEXT NOT NULL,
+            reward_event_type TEXT NOT NULL, estimated_price TEXT NOT NULL DEFAULT '0',
+            status TEXT NOT NULL, created_at BIGINT NOT NULL)""")
         conn.execute("""CREATE TABLE IF NOT EXISTS game_rewards (
             telegram_id TEXT NOT NULL, game TEXT NOT NULL, day TEXT NOT NULL,
             coins INTEGER NOT NULL, created_at INTEGER NOT NULL,
@@ -115,9 +121,7 @@ def verify_telegram_init_data(init_data):
         if not hmac.compare_digest(calculated, received_hash):
             return None
         auth_date = int(values.get("auth_date", "0"))
-        now = int(time.time())
-        # Reject stale initData and timestamps too far in the future.
-        if auth_date <= 0 or auth_date > now + 30 or now - auth_date > 3600:
+        if abs(int(time.time()) - auth_date) > 86400:
             return None
         user = json.loads(values.get("user", "{}"))
         if not user.get("id"):
@@ -244,7 +248,8 @@ def index():
 def config():
     return jsonify({"bot_username": BOT_USERNAME, "demo_mode": DEMO_MODE,
                     "coins_per_rupee": COINS_PER_RUPEE, "coins_per_ad": COINS_PER_AD,
-                    "daily_ad_limit": DAILY_AD_LIMIT, "min_withdraw_rupees": MIN_WITHDRAW_RUPEES})
+                    "daily_ad_limit": DAILY_AD_LIMIT, "min_withdraw_rupees": MIN_WITHDRAW_RUPEES,
+                    "monetag_zone_id": MONETAG_ZONE_ID, "monetag_sdk_url": MONETAG_SDK_URL})
 
 @app.get("/api/me")
 @require_user
@@ -263,11 +268,7 @@ def me():
 @app.post("/api/claim-game-reward")
 @require_user
 def claim_game_reward():
-    """Grant at most one server-side reward per game per user per day.
-
-    This still cannot prove the game was genuinely played; use it only as a low-value,
-    capped reward until gameplay is validated server-side.
-    """
+    """Grant 5 coins with a separate server-enforced 10-minute cooldown per game."""
     user = request.user_data
     if user["telegram_id"] == "demo-user":
         return jsonify({"error": "Open CoinNest inside Telegram to claim real coins."}), 401
@@ -279,69 +280,44 @@ def claim_game_reward():
     reward = 5
     with db() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        day_start = int(time.mktime(time.strptime(time.strftime("%Y-%m-%d", time.localtime(now)), "%Y-%m-%d")))
-        last = conn.execute("SELECT 1 FROM game_reward_claims WHERE telegram_id=? AND game=? AND created_at>=? LIMIT 1", (user["telegram_id"], game, day_start)).fetchone()
-        if last:
+        last = conn.execute("SELECT created_at FROM game_reward_claims WHERE telegram_id=? AND game=? ORDER BY created_at DESC LIMIT 1", (user["telegram_id"], game)).fetchone()
+        if last and now - int(last["created_at"]) < 600:
+            remaining = 600 - (now - int(last["created_at"]))
             conn.rollback()
-            return jsonify({"error": f"Today's {game} reward has already been claimed."}), 429
+            return jsonify({"error": f"Please wait {remaining // 60}m {remaining % 60}s before claiming another {game} reward."}), 429
         conn.execute("INSERT INTO game_reward_claims(telegram_id, game, coins, created_at) VALUES(?,?,?,?)", (user["telegram_id"], game, reward, now))
         conn.execute("UPDATE users SET balance=balance+? WHERE telegram_id=?", (reward, user["telegram_id"]))
         conn.commit()
     return jsonify({"ok": True, "coins_added": reward, "message": f"5 coins added for {game}! This game's next claim is available in 10 minutes."})
 
 
-@app.post("/api/claim-ad")
+@app.post("/api/monetag/claim")
 @require_user
-def claim_ad():
-    """Client-side requests must never directly credit ad rewards."""
-    return jsonify({"error": "Ad rewards are credited only after a verified AdsGram server callback."}), 403
-
-@app.get("/adsgram/reward")
-def adsgram_reward_callback():
-    """AdsGram server-to-server reward callback.
-
-    Configure the AdsGram Reward URL with its documented user ID and unique event ID
-    placeholders. The event ID is mandatory to prevent replay/double-crediting.
-    The shared secret must be set as ADSGRAM_REWARD_SECRET in the hosting environment.
-    """
-    if not ADSGRAM_REWARD_SECRET:
-        app.logger.error("AdsGram reward callback rejected: ADSGRAM_REWARD_SECRET is not configured")
-        return jsonify({"ok": False, "error": "Reward callback is not configured"}), 503
-
-    supplied_secret = request.args.get("secret", "")
-    if not supplied_secret or not hmac.compare_digest(supplied_secret, ADSGRAM_REWARD_SECRET):
-        return jsonify({"ok": False, "error": "Unauthorized"}), 403
-
-    telegram_id = request.args.get("userId", "").strip()
-    event_id = request.args.get("eventId", request.args.get("event_id", "")).strip()
-    if not telegram_id.isdigit() or len(telegram_id) > 20:
-        return jsonify({"ok": False, "error": "Invalid userId"}), 400
-    if not event_id or len(event_id) > 200:
-        return jsonify({"ok": False, "error": "Missing or invalid unique eventId; configure the provider's event ID placeholder."}), 400
-
+def claim_monetag_reward():
+    """Rate-limited client-callback reward. This is NOT provider-verified proof."""
+    user = request.user_data
+    if user["telegram_id"] == "demo-user":
+        return jsonify({"error": "Open CoinNest inside Telegram to earn rewards."}), 401
+    if not MONETAG_ZONE_ID or not MONETAG_SDK_URL:
+        return jsonify({"error": "Monetag is not configured yet."}), 503
     today = time.strftime("%Y-%m-%d", time.localtime())
     now = int(time.time())
     with db() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        user_row = conn.execute("SELECT telegram_id FROM users WHERE telegram_id=?", (telegram_id,)).fetchone()
-        if not user_row:
-            conn.rollback()
-            return jsonify({"ok": False, "error": "User not found"}), 404
-        existing_event = conn.execute("SELECT 1 FROM ad_reward_events WHERE event_id=?", (event_id,)).fetchone()
-        if existing_event:
-            conn.rollback()
-            return jsonify({"ok": True, "duplicate": True, "message": "Reward event already processed."})
-        count_row = conn.execute("SELECT COUNT(*) AS n FROM ad_claims WHERE telegram_id=? AND day=?", (telegram_id, today)).fetchone()
-        count = int(count_row["n"] if count_row else 0)
+        row = conn.execute("SELECT COUNT(*) AS n FROM ad_claims WHERE telegram_id=? AND day=?", (user["telegram_id"], today)).fetchone()
+        count = int(row["n"] if row else 0)
         if count >= DAILY_AD_LIMIT:
             conn.rollback()
-            return jsonify({"ok": False, "error": "Daily ad reward limit reached"}), 429
-        conn.execute("INSERT INTO ad_reward_events(event_id, telegram_id, created_at) VALUES(?,?,?)", (event_id, telegram_id, now))
-        conn.execute("INSERT INTO ad_claims(telegram_id, day, created_at) VALUES(?,?,?)", (telegram_id, today, now))
-        conn.execute("UPDATE users SET balance=balance+? WHERE telegram_id=?", (COINS_PER_AD, telegram_id))
+            return jsonify({"error": f"Daily ad limit reached ({DAILY_AD_LIMIT} ads). Come back tomorrow."}), 429
+        last = conn.execute("SELECT created_at FROM ad_claims WHERE telegram_id=? ORDER BY created_at DESC LIMIT 1", (user["telegram_id"],)).fetchone()
+        if last and now - int(last["created_at"]) < 60:
+            conn.rollback()
+            return jsonify({"error": "Please wait before claiming another ad reward."}), 429
+        conn.execute("INSERT INTO ad_claims(telegram_id, day, created_at) VALUES(?,?,?)", (user["telegram_id"], today, now))
+        conn.execute("UPDATE users SET balance=balance+? WHERE telegram_id=?", (COINS_PER_AD, user["telegram_id"]))
         conn.commit()
-
-    return jsonify({"ok": True, "reward": COINS_PER_AD, "ads_today": count + 1})
+    return jsonify({"ok": True, "reward": COINS_PER_AD, "ads_today": count + 1, "daily_limit": DAILY_AD_LIMIT,
+                    "warning": "Reward accepted from client callback; this is not provider-side verification."})
 
 
 @app.post("/api/withdraw")
@@ -429,7 +405,7 @@ def referral_stats():
                     "bonus_coins": bonuses, "commission_coins": commissions,
                     "commission_percent": 20, "bonus_per_completed_referral": 50,
                     "ads_required": 5,
-                    "note": "Referral attribution is enabled. Bonus/commission payouts stay disabled until AdsGram server-side reward verification is configured."})
+                    "note": "Referral attribution is enabled. Bonus/commission payouts stay disabled until Monetag server-side reward verification is configured."})
 
 
 @app.get("/api/admin/status")
