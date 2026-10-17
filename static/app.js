@@ -55,17 +55,25 @@ async function loadMonetag() {
   monetagLoadPromise = (async () => {
     monetagConfig = await api("/api/config");
     const zone = String(monetagConfig.monetag_zone_id || "12053770").trim();
-    const sdkUrl = String(monetagConfig.monetag_sdk_url || "").trim();
-    if (!sdkUrl) throw new Error("Add MONETAG_SDK_URL from your Monetag dashboard in Vercel.");
+    const sdkUrl = String(monetagConfig.monetag_sdk_url || "https://libtl.com/sdk.js").trim();
     const sdkName = `show_${zone}`;
     if (typeof window[sdkName] === "function") return sdkName;
     await new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = sdkUrl; script.async = true;
-      script.dataset.coinnestMonetag = zone;
-      script.onload = resolve;
-      script.onerror = () => reject(new Error("Monetag SDK failed to load. Check MONETAG_SDK_URL."));
-      document.head.appendChild(script);
+      // Reuse the SDK tag already included in index.html; do not inject a duplicate.
+      let script = document.querySelector(`script[data-sdk="${sdkName}"]`);
+      if (typeof window[sdkName] === "function") return resolve();
+      if (!script) {
+        script = document.createElement("script");
+        script.src = sdkUrl;
+        script.async = true;
+        script.dataset.zone = zone;
+        script.dataset.sdk = sdkName;
+        document.head.appendChild(script);
+      }
+      script.addEventListener("load", resolve, { once: true });
+      script.addEventListener("error", () => reject(new Error("Monetag SDK failed to load. Check the script URL or network.")), { once: true });
+      // If it loaded before the listeners were attached, verify shortly after setup.
+      if (typeof window[sdkName] === "function") resolve();
     });
     if (typeof window[sdkName] !== "function") throw new Error(`Monetag function ${sdkName} was not created. Check the exact SDK script from Monetag.`);
     return sdkName;
