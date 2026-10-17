@@ -20,7 +20,7 @@ OWNER_ADMIN_ID = os.environ.get("OWNER_ADMIN_ID", "1849699189").strip()
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "https://coinnest-webapp.onrender.com").strip().rstrip("/")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "").strip()
 MONETAG_ZONE_ID = os.environ.get("MONETAG_ZONE_ID", "").strip()
-MONETAG_SDK_URL = os.environ.get("MONETAG_SDK_URL", "").strip()
+MONETAG_SDK_URL = os.environ.get("MONETAG_SDK_URL", "https://libtl.com/sdk.js").strip()
 class DBConnection:
     """Small compatibility wrapper for the existing SQL call style, backed by PostgreSQL."""
     def __init__(self):
