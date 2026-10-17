@@ -47,7 +47,7 @@ document.querySelectorAll(".tab").forEach(btn=>btn.addEventListener("click",()=>
   document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===btn));
   document.querySelectorAll(".panel").forEach(x=>x.classList.toggle("active",x.id==="panel-"+btn.dataset.tab));
 }));
-// Monetag SDK loader. Use the zone ID and script URL supplied by Monetag.
+// Monetag SDK loader with a bounded wait so the UI cannot stay on "Loading ad…" forever.
 let monetagConfig = null;
 let monetagLoadPromise = null;
 async function loadMonetag() {
@@ -58,25 +58,26 @@ async function loadMonetag() {
     const sdkUrl = String(monetagConfig.monetag_sdk_url || "https://libtl.com/sdk.js").trim();
     const sdkName = `show_${zone}`;
     if (typeof window[sdkName] === "function") return sdkName;
-    await new Promise((resolve, reject) => {
-      // Reuse the SDK tag already included in index.html; do not inject a duplicate.
-      let script = document.querySelector(`script[data-sdk="${sdkName}"]`);
-      if (typeof window[sdkName] === "function") return resolve();
-      if (!script) {
-        script = document.createElement("script");
-        script.src = sdkUrl;
-        script.async = true;
-        script.dataset.zone = zone;
-        script.dataset.sdk = sdkName;
-        document.head.appendChild(script);
-      }
-      script.addEventListener("load", resolve, { once: true });
-      script.addEventListener("error", () => reject(new Error("Monetag SDK failed to load. Check the script URL or network.")), { once: true });
-      // If it loaded before the listeners were attached, verify shortly after setup.
-      if (typeof window[sdkName] === "function") resolve();
-    });
-    if (typeof window[sdkName] !== "function") throw new Error(`Monetag function ${sdkName} was not created. Check the exact SDK script from Monetag.`);
-    return sdkName;
+
+    let script = document.querySelector(`script[data-sdk="${sdkName}"]`);
+    if (!script) {
+      script = document.createElement("script");
+      script.src = sdkUrl;
+      script.async = true;
+      script.dataset.zone = zone;
+      script.dataset.sdk = sdkName;
+      document.head.appendChild(script);
+    }
+
+    // Poll instead of relying only on a load event: the script may have loaded
+    // before this button was clicked, which otherwise can leave the UI hanging.
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+      if (typeof window[sdkName] === "function") return sdkName;
+      if (script.dataset.loadFailed === "true") break;
+      await new Promise(resolve => setTimeout(resolve, 150));
+    }
+    throw new Error("Monetag SDK did not initialize. Check the zone/script and try opening CoinNest in Telegram again.");
   })();
   try { return await monetagLoadPromise; }
   catch (e) { monetagLoadPromise = null; throw e; }
@@ -87,8 +88,11 @@ $("watch-btn").addEventListener("click", async () => {
   btn.disabled = true; btn.textContent = "Loading ad…";
   try {
     const sdkName = await loadMonetag();
-    // Matches the Monetag snippet provided by the user: show_12053770('pop').
-    await window[sdkName]("pop");
+    // The SDK may never settle when no ad is available; cap the wait and restore the button.
+    await Promise.race([
+      Promise.resolve().then(() => window[sdkName]("pop")),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Ad did not finish loading. It may be unavailable right now; please try again later.")), 45000))
+    ]);
     const result = await api("/api/monetag/claim", { method: "POST", body: JSON.stringify({ format: "pop" }) });
     toast(`Ad flow completed. ${result.reward} coins added.`);
     await refresh();
