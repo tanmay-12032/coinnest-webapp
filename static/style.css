@@ -130,7 +130,7 @@ body { padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px)) !important
 /* Monetag status message - keep above bottom navigation */
 #monetag-status {
   position: fixed !important;
-  top: auto !important;
+  top: 100% !important;
   bottom: 100px !important;
   left: 50% !important;
   transform: translateX(-50%);
