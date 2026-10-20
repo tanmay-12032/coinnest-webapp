@@ -13,14 +13,10 @@ BOT_USERNAME = os.environ.get("BOT_USERNAME", "CoinNest_bot").strip().lstrip("@"
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "").strip()
 DEMO_MODE = os.environ.get("DEMO_MODE", "1") == "1"
 COINS_PER_RUPEE = 100
-COINS_PER_AD = 10
-DAILY_AD_LIMIT = 25
 MIN_WITHDRAW_RUPEES = 10
 OWNER_ADMIN_ID = os.environ.get("OWNER_ADMIN_ID", "1849699189").strip()
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "https://coinnest-webapp.onrender.com").strip().rstrip("/")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "").strip()
-MONETAG_ZONE_ID = os.environ.get("MONETAG_ZONE_ID", "").strip()
-MONETAG_SDK_URL = os.environ.get("MONETAG_SDK_URL", "https://libtl.com/sdk.js").strip()
 class DBConnection:
     """Small compatibility wrapper for the existing SQL call style, backed by PostgreSQL."""
     def __init__(self):
@@ -247,78 +243,18 @@ def index():
 @app.get("/api/config")
 def config():
     return jsonify({"bot_username": BOT_USERNAME, "demo_mode": DEMO_MODE,
-                    "coins_per_rupee": COINS_PER_RUPEE, "coins_per_ad": COINS_PER_AD,
-                    "daily_ad_limit": DAILY_AD_LIMIT, "min_withdraw_rupees": MIN_WITHDRAW_RUPEES,
-                    "monetag_zone_id": MONETAG_ZONE_ID, "monetag_sdk_url": MONETAG_SDK_URL})
+                    "coins_per_rupee": COINS_PER_RUPEE, "min_withdraw_rupees": MIN_WITHDRAW_RUPEES})
 
 @app.get("/api/me")
 @require_user
 def me():
     user = current_user()
-    today = time.strftime("%Y-%m-%d", time.localtime())
     with db() as conn:
         row = conn.execute("SELECT balance FROM users WHERE telegram_id=?", (user["telegram_id"],)).fetchone()
-        ads = conn.execute("SELECT COUNT(*) n FROM ad_claims WHERE telegram_id=? AND day=?",
-                           (user["telegram_id"], today)).fetchone()["n"]
         history = conn.execute("SELECT id, amount_rupees, amount_coins, upi_id, status, created_at, method, payout_id, amount_value FROM withdrawals WHERE telegram_id=? ORDER BY id DESC LIMIT 10",
                                (user["telegram_id"],)).fetchall()
-    return jsonify({"user": user, "balance": row["balance"], "ads_today": ads,
+    return jsonify({"user": user, "balance": row["balance"],
                     "withdrawals": [dict(x) for x in history]})
-
-@app.post("/api/claim-game-reward")
-@require_user
-def claim_game_reward():
-    """Grant 5 coins with a separate server-enforced 10-minute cooldown per game."""
-    user = request.user_data
-    if user["telegram_id"] == "demo-user":
-        return jsonify({"error": "Open CoinNest inside Telegram to claim real coins."}), 401
-    payload = request.get_json(silent=True) or {}
-    game = str(payload.get("game", "")).strip()
-    if game not in ("maze", "math", "village"):
-        return jsonify({"error": "Unknown game reward."}), 400
-    now = int(time.time())
-    reward = 5
-    with db() as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        last = conn.execute("SELECT created_at FROM game_reward_claims WHERE telegram_id=? AND game=? ORDER BY created_at DESC LIMIT 1", (user["telegram_id"], game)).fetchone()
-        if last and now - int(last["created_at"]) < 600:
-            remaining = 600 - (now - int(last["created_at"]))
-            conn.rollback()
-            return jsonify({"error": f"Please wait {remaining // 60}m {remaining % 60}s before claiming another {game} reward."}), 429
-        conn.execute("INSERT INTO game_reward_claims(telegram_id, game, coins, created_at) VALUES(?,?,?,?)", (user["telegram_id"], game, reward, now))
-        conn.execute("UPDATE users SET balance=balance+? WHERE telegram_id=?", (reward, user["telegram_id"]))
-        conn.commit()
-    return jsonify({"ok": True, "coins_added": reward, "message": f"5 coins added for {game}! This game's next claim is available in 10 minutes."})
-
-
-@app.post("/api/monetag/claim")
-@require_user
-def claim_monetag_reward():
-    """Rate-limited client-callback reward. This is NOT provider-verified proof."""
-    user = request.user_data
-    if user["telegram_id"] == "demo-user":
-        return jsonify({"error": "Open CoinNest inside Telegram to earn rewards."}), 401
-    if not MONETAG_ZONE_ID or not MONETAG_SDK_URL:
-        return jsonify({"error": "Monetag is not configured yet."}), 503
-    today = time.strftime("%Y-%m-%d", time.localtime())
-    now = int(time.time())
-    with db() as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute("SELECT COUNT(*) AS n FROM ad_claims WHERE telegram_id=? AND day=?", (user["telegram_id"], today)).fetchone()
-        count = int(row["n"] if row else 0)
-        if count >= DAILY_AD_LIMIT:
-            conn.rollback()
-            return jsonify({"error": f"Daily ad limit reached ({DAILY_AD_LIMIT} ads). Come back tomorrow."}), 429
-        last = conn.execute("SELECT created_at FROM ad_claims WHERE telegram_id=? ORDER BY created_at DESC LIMIT 1", (user["telegram_id"],)).fetchone()
-        if last and now - int(last["created_at"]) < 60:
-            conn.rollback()
-            return jsonify({"error": "Please wait before claiming another ad reward."}), 429
-        conn.execute("INSERT INTO ad_claims(telegram_id, day, created_at) VALUES(?,?,?)", (user["telegram_id"], today, now))
-        conn.execute("UPDATE users SET balance=balance+? WHERE telegram_id=?", (COINS_PER_AD, user["telegram_id"]))
-        conn.commit()
-    return jsonify({"ok": True, "reward": COINS_PER_AD, "ads_today": count + 1, "daily_limit": DAILY_AD_LIMIT,
-                    "warning": "Reward accepted from client callback; this is not provider-side verification."})
-
 
 @app.post("/api/withdraw")
 @require_user
