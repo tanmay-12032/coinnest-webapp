@@ -1,7 +1,7 @@
 const tg = window.Telegram?.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 const initData = tg?.initData || "";
-let state = { balance: 0, ads_today: 0, user: null, withdrawals: [] };
+let state = { balance: 0, user: null, withdrawals: [] };
 const $ = id => document.getElementById(id);
 function toast(msg){const el=$("toast");el.textContent=msg;el.classList.add("show");setTimeout(()=>el.classList.remove("show"),3000)}
 async function api(path, options={}) {
@@ -13,6 +13,7 @@ async function api(path, options={}) {
 }
 function renderHistory(target){
   const el=$(target);
+  if(!el) return;
   if(!state.withdrawals.length){el.className="history empty";el.textContent="No withdrawal requests yet.";return}
   el.className="history";el.innerHTML="";
   state.withdrawals.forEach(w=>{
@@ -29,10 +30,8 @@ function renderHistory(target){
 function render(){
   $("balance").textContent=Number(state.balance).toLocaleString("en-IN");
   $("rupee-balance").textContent=`≈ ₹${(state.balance/100).toFixed(2)} available`;
-  $("ads-count").textContent=`${state.ads_today}/25 ads today`;
   $("profile-hero-balance").textContent=Number(state.balance).toLocaleString("en-IN");
   $("profile-hero-rupees").textContent=`≈ ₹${(state.balance/100).toFixed(2)} available`;
-  $("profile-hero-ads-count").textContent=`${state.ads_today}/25 ads today`;
   if(state.user){
     const name=[state.user.first_name,state.user.last_name].filter(Boolean).join(" ")||"Telegram User";
     $("profile-name").textContent=name;
@@ -40,72 +39,13 @@ function render(){
     $("profile-id").textContent="Telegram ID: "+state.user.telegram_id;
     $("avatar").textContent=(state.user.first_name||"C").slice(0,1).toUpperCase();
   }
-  renderHistory("home-history");renderHistory("wallet-history");
+  renderHistory("wallet-history");
 }
 async function refresh(){try{state=await api("/api/me");render()}catch(e){toast(e.message)}}
 document.querySelectorAll(".tab").forEach(btn=>btn.addEventListener("click",()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===btn));
   document.querySelectorAll(".panel").forEach(x=>x.classList.toggle("active",x.id==="panel-"+btn.dataset.tab));
 }));
-// Monetag SDK loader: use the dashboard-provided zone directly and report useful diagnostics.
-let monetagLoadPromise = null;
-async function loadMonetag() {
-  if (monetagLoadPromise) return monetagLoadPromise;
-  monetagLoadPromise = (async () => {
-    const zone = "12053770";
-    const sdkName = `show_${zone}`;
-    if (typeof window[sdkName] === "function") return sdkName;
-
-    let script = document.querySelector(`script[data-sdk="${sdkName}"]`);
-    if (!script) {
-      script = document.createElement("script");
-      script.src = "https://libtl.com/sdk.js";
-      script.async = true;
-      script.dataset.zone = zone;
-      script.dataset.sdk = sdkName;
-      script.onerror = () => { script.dataset.loadFailed = "true"; };
-      document.head.appendChild(script);
-    }
-
-    const deadline = Date.now() + 15000;
-    while (Date.now() < deadline) {
-      if (typeof window[sdkName] === "function") return sdkName;
-      if (script.dataset.loadFailed === "true") {
-        throw new Error("Monetag SDK script could not load. Check your connection, content blocker, and Monetag integration settings.");
-      }
-      await new Promise(resolve => setTimeout(resolve, 200));
-    }
-    console.error("Monetag SDK diagnostics", {
-      scriptSrc: script.src,
-      scriptLoadedEventSeen: script.dataset.loadFailed !== "true",
-      sdkFunctionType: typeof window[sdkName],
-      userAgent: navigator.userAgent
-    });
-    throw new Error("Monetag script did not expose show_12053770. Check Monetag zone setup and whether Telegram/network blocking prevents the SDK from running.");
-  })();
-  try { return await monetagLoadPromise; }
-  catch (e) { monetagLoadPromise = null; throw e; }
-}
-
-$("watch-btn").addEventListener("click", async () => {
-  const btn = $("watch-btn");
-  btn.disabled = true; btn.textContent = "Loading ad…";
-  try {
-    const sdkName = await loadMonetag();
-    // The SDK may never settle when no ad is available; cap the wait and restore the button.
-    await Promise.race([
-      Promise.resolve().then(() => window[sdkName]("pop")),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Ad did not finish loading. It may be unavailable right now; please try again later.")), 45000))
-    ]);
-    const result = await api("/api/monetag/claim", { method: "POST", body: JSON.stringify({ format: "pop" }) });
-    toast(`Ad flow completed. ${result.reward} coins added.`);
-    await refresh();
-  } catch (e) {
-    toast(e.message || "Ad was unavailable or did not complete. No coins were added.");
-  } finally {
-    btn.disabled = false; btn.textContent = "Watch ads";
-  }
-});
 let selectedWithdrawalMethod="payz";
 const withdrawalMethods={
  payz:{label:"Payz Gateway number",placeholder:"Enter 10-digit Payz number",inputmode:"numeric",type:"tel",maxLength:20,amountLabel:"Withdrawal amount (₹)",min:1,step:1,amountPlaceholder:"e.g. 1",minLabel:"Minimum withdrawal",minValue:"₹1",infoLabel:"Payz number",infoValue:"10 digits"},
@@ -160,138 +100,11 @@ $("copy-ref")?.addEventListener("click",async()=>{
 });
 loadReferrals();
 
-// Games are entertainment only; they do not grant coins or affect referral eligibility.
-document.querySelectorAll("[data-game]").forEach(btn=>btn.addEventListener("click",()=>{
-  document.querySelectorAll(".game-panel").forEach(p=>p.hidden=true);
-  const panel=$("game-"+btn.dataset.game); if(panel) panel.hidden=false;
-  if(btn.dataset.game==="maze")startNewMaze();
-  if(btn.dataset.game==="village") newVillage();
-}));
-document.querySelectorAll("[data-close-game]").forEach(btn=>btn.addEventListener("click",()=>{
-  btn.closest(".game-panel").hidden=true;
-}));
-
-let mathAnswer=0, mathScore=0, mathRound=0, mathRewardPrompted=false, mathAnswerCount=0, pendingRetry=null;
-function nextMath(){
-  const op=["+","−","×","÷"][Math.floor(Math.random()*4)];
-  let a,b;
-  if(op==="÷"){b=Math.floor(Math.random()*9)+2;mathAnswer=Math.floor(Math.random()*12)+1;a=b*mathAnswer;}
-  else {a=Math.floor(Math.random()*30)+1;b=Math.floor(Math.random()*20)+1;mathAnswer=op==="+"?a+b:op==="−"?a-b:a*b;}
-  $("math-question").textContent=`${a} ${op} ${b} = ?`;
-  const choices=new Set([mathAnswer,mathAnswer+Math.ceil(Math.random()*5),mathAnswer-Math.ceil(Math.random()*5),mathAnswer+Math.ceil(Math.random()*10)]);
-  const arr=[...choices].sort(()=>Math.random()-.5).slice(0,4);
-  if(!arr.includes(mathAnswer)) arr[0]=mathAnswer;
-  $("math-answers").innerHTML="";
-  arr.sort(()=>Math.random()-.5).forEach(n=>{
-    const b=document.createElement("button");b.className="answer-button";b.textContent=n;
-    b.addEventListener("click",()=>{
-      if(n!==mathAnswer){showIncorrect("math",()=>{},()=>advanceMath(false));return;}
-      mathScore++;mathAnswerCount++;$("math-feedback").textContent=`Correct! Score: ${mathScore}`;
-      advanceMath(true);
-    });$("math-answers").append(b);
-  });
-}
-function advanceMath(correct){
-  mathRound++;
-  if(mathAnswerCount>0 && mathAnswerCount%5===0){openGameReward("math");}
-  if(mathRound>=10){$("math-question").textContent=`Quiz complete! Final score: ${mathScore}/10`;$("math-answers").innerHTML="";return;}
-  nextMath();
-}
-$("math-start")?.addEventListener("click",()=>{mathScore=0;mathRound=0;mathAnswerCount=0;mathRewardPrompted=false;$("math-feedback").textContent="";nextMath()});
-
-// Small fixed maze; # are walls, S is start, E is exit.
-const mazeMap=["#########","#S#.....#","#.#.###.#","#...#...#","###.#.#.#","#.....#.E","#########"];
-let ball={r:1,c:1};
-let mazeRewardPrompted=false, mazeWon=false;
-function startNewMaze(){
-  const cells=[];mazeMap.forEach((row,r)=>[...row].forEach((ch,c)=>{if(ch==="."||ch==="S")cells.push({r,c})}));
-  ball=cells[Math.floor(Math.random()*cells.length)];mazeRewardPrompted=false;mazeWon=false;
-  $("maze-feedback").textContent="Find the exit on the outer boundary!";drawMaze();
-}
-function drawMaze(){
-  const board=$("maze-board"); if(!board)return;board.innerHTML="";
-  mazeMap.forEach((row,r)=>[...row].forEach((cell,c)=>{
-    const tile=document.createElement("div");tile.className="maze-cell "+(cell==="#"?"wall":"path");
-    if(r===ball.r&&c===ball.c){tile.textContent="🔵";tile.classList.add("ball")}
-    else if(cell==="E")tile.textContent="🟢";
-    board.append(tile);
-  }));
-}
-function moveBall(dir){
-  if(mazeWon)return;
-  const delta={up:[-1,0],down:[1,0],left:[0,-1],right:[0,1]}[dir];if(!delta)return;
-  const r=ball.r+delta[0],c=ball.c+delta[1];
-  if(!mazeMap[r]||mazeMap[r][c]==="#"||!mazeMap[r][c])return;
-  ball={r,c};drawMaze();
-  if(mazeMap[r][c]==="E"){
-    mazeWon=true;$("maze-feedback").textContent="You escaped the maze! 🎉";
-    if(!mazeRewardPrompted){mazeRewardPrompted=true;openGameReward("maze");}
-  }
-}
-let currentRewardGame="maze";
-function openGameReward(game){
-  currentRewardGame=game;
-  const modal=$("maze-reward-modal");
-  if(!modal)return;
-  $("maze-reward-title").textContent="You won 5 coins!";
-  $("maze-reward-message").textContent="";
-  $("maze-claim").disabled=false;
-  $("maze-claim").textContent="Claim 5 coins";
-  modal.hidden=false;
-}
-function closeMazeReward(){ $("maze-reward-modal").hidden=true; }
-$("maze-skip")?.addEventListener("click",closeMazeReward);
-$("maze-claim")?.addEventListener("click",async()=>{
-  const btn=$("maze-claim");
-  btn.disabled=true;btn.textContent="Claiming…";
+(async()=>{
   try{
-    const result=await api("/api/claim-game-reward",{method:"POST",body:JSON.stringify({game:currentRewardGame})});
-    $("maze-reward-message").textContent=result.message||"5 coins added to your balance!";
-    $("maze-reward-message").classList.add("success");
+    const config=await api("/api/config");
+    if(config.demo_mode && !initData){$("mode-pill").textContent="Demo mode";toast("Demo mode: open through Telegram for a real user profile.")}
+    if(tg?.initDataUnsafe?.user){const u=tg.initDataUnsafe.user;$("profile-name").textContent=[u.first_name,u.last_name].filter(Boolean).join(" ")}
     await refresh();
-    btn.textContent="Claimed ✓";
-    setTimeout(closeMazeReward,1200);
-  }catch(e){
-    $("maze-reward-message").textContent=e.message;
-    btn.disabled=false;btn.textContent="Try claim again";
-  }
-});
-$("maze-new-game")?.addEventListener("click",startNewMaze);
-document.querySelectorAll("[data-move]").forEach(b=>b.addEventListener("click",()=>moveBall(b.dataset.move)));
-document.addEventListener("keydown",e=>{if(!$("game-maze")?.hidden){const d={ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right"}[e.key];if(d){e.preventDefault();moveBall(d)}}});
-
-
-let incorrectRetryAction=null, incorrectCancelAction=null;
-function showIncorrect(game,retry,cancel){
-  incorrectRetryAction=retry;incorrectCancelAction=cancel;
-  const m=$("incorrect-modal");if(!m)return;
-  $("incorrect-message").textContent=game==="math"?"Wrong answer. Try this question again?":"Wrong object. Try choosing again?";
-  m.hidden=false;
-}
-$("incorrect-retry")?.addEventListener("click",()=>{ $("incorrect-modal").hidden=true; if(incorrectRetryAction)incorrectRetryAction(); });
-$("incorrect-cancel")?.addEventListener("click",()=>{ $("incorrect-modal").hidden=true; if(incorrectCancelAction)incorrectCancelAction(); });
-
-// Village hidden-object game: tap the matching tiny objects.
-const villageObjectSets=[
- {emoji:"🪣",name:"buckets",count:4,others:["🌻","🍎","🐓","🪵","🧺","🥕","🐈","🪴","🪚"]},
- {emoji:"🍎",name:"apples",count:5,others:["🪣","🌻","🐓","🪵","🧺","🥕","🐈","🪴","🍐"]},
- {emoji:"🐓",name:"chickens",count:4,others:["🪣","🌻","🍎","🪵","🧺","🥕","🐈","🪴","🐇"]},
- {emoji:"🌻",name:"sunflowers",count:5,others:["🪣","🍎","🐓","🪵","🧺","🥕","🐈","🪴","🌷"]}
-];
-let villageFound=0,villageNeed=3,villageTarget="🪣";
-function newVillage(){
- villageFound=0;const set=villageObjectSets[Math.floor(Math.random()*villageObjectSets.length)];
- villageTarget=set.emoji;villageNeed=set.count;$("village-target").textContent=`${set.emoji} ${set.name} × ${set.count}`;
- $("village-feedback").textContent=`Find all ${set.count} ${set.name}.`;
- const scene=$("village-scene");scene.innerHTML="";
- const items=Array.from({length:48},()=>set.others[Math.floor(Math.random()*set.others.length)]);
- const slots=new Set();while(slots.size<set.count)slots.add(Math.floor(Math.random()*items.length));
- slots.forEach(i=>items[i]=set.emoji);items.sort(()=>Math.random()-.5).forEach(emoji=>{
-  const item=document.createElement("button");item.className="village-object";item.textContent=emoji;item.setAttribute("aria-label","Village object");
-  item.addEventListener("click",()=>{if(item.disabled)return;if(emoji===villageTarget){item.disabled=true;item.classList.add("found");villageFound++;$("village-feedback").textContent=`Found ${villageFound}/${villageNeed}!`;if(villageFound===villageNeed){$("village-feedback").textContent="All objects found! 🎉";openGameReward("village");}}else showIncorrect("village",()=>{item.disabled=false;item.classList.remove("found");},()=>{$("village-feedback").textContent="Keep searching for the remaining objects.";});});
-  scene.append(item);
- });
-}
-
-// Ensure the village challenge reset button is wired up.
-document.getElementById("village-reset")?.addEventListener("click", () => newVillage());
+  }catch(e){toast(e.message)}
+})();
