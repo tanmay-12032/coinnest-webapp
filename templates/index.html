@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="referrer" content="strict-origin-when-cross-origin"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CoinNest — Rewards Wallet</title>
 <link rel="stylesheet" href="/static/style.css">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -17,7 +17,6 @@
         <div class="balance"><span id="balance">—</span><small> coins</small></div>
         <div class="rupee" id="rupee-balance">Loading balance…</div>
       </section>
-      <button class="primary full home-create-lifafa" id="open-create-lifafa" type="button">🧧 Create Lifafa</button>
     </section>
     <section class="panel" id="panel-refer">
       <div class="section-head"><div><h2>Refer & Earn</h2><p>Invite friends to CoinNest</p></div><div class="coin-icon">🎁</div></div>
@@ -34,7 +33,21 @@
         <div class="rupee" id="profile-hero-rupees">Loading balance…</div>
         <div class="hero-bottom"><span>100 coins = ₹1</span></div>
       </section>
-      
+      <section class="lifafa-card" id="create-lifafa-card">
+        <div class="section-head"><div><h2>🧧 Create Lifafa</h2><p>Amount is reserved from your CoinNest balance</p></div></div>
+        <form id="lifafa-form">
+          <label for="lifafa-title">Lifafa title</label><input id="lifafa-title" maxlength="100" placeholder="e.g. Special Giveaway" required>
+          <div class="lifafa-grid"><div><label for="lifafa-amount">Amount per user (₹)</label><input id="lifafa-amount" type="number" min="1" step="1" value="10" required></div><div><label for="lifafa-users">Total users</label><input id="lifafa-users" type="number" min="1" step="1" value="10" required></div></div>
+          <div class="helper" id="lifafa-total">Total cost: 10,000 coins</div>
+          <label for="lifafa-channels">Required channels (1–6, one per line)</label>
+          <textarea id="lifafa-channels" rows="4" placeholder="@channelname | https://t.me/channelname | Channel title" required></textarea>
+          <p class="smallprint">Format: channel ID or @username | invite link | title. Bot must be admin in every channel.</p>
+          <label for="lifafa-password">Password (optional)</label><input id="lifafa-password" maxlength="128" type="password" placeholder="Leave empty for no password">
+          <label class="check-row"><input id="lifafa-refer" type="checkbox"> Enable Refer & Earn</label>
+          <button class="primary full" id="lifafa-create" type="submit">Create Lifafa & Reserve Balance</button>
+        </form><div id="lifafa-result" class="result" hidden></div>
+      </section>
+      <section class="lifafa-card" id="lifafa-claim-card" hidden><h2 id="claim-lifafa-title">Lifafa</h2><p id="claim-lifafa-meta" class="smallprint"></p><div id="claim-lifafa-channels"></div><button class="primary full" id="claim-verify">Verify channels</button><div id="claim-password-wrap" hidden><label for="claim-password">Password</label><input id="claim-password" type="password" placeholder="Enter lifafa password"></div><button class="primary full" id="claim-lifafa-button">Claim Lifafa</button><div id="claim-lifafa-result" class="result" hidden></div></section>
       <div class="profile-withdraw-heading"><h2>Withdraw</h2><p>Choose your payout method</p></div>
       <div class="withdraw-methods" role="group" aria-label="Withdrawal method">
         <button type="button" class="method-option active" data-method="payz">Payz</button>
@@ -59,22 +72,6 @@
       <div id="wallet-history" class="history empty">No withdrawal requests yet.</div>
       <div class="notice">Your profile is created from your Telegram ID and name when you open this Mini App from the bot. Do not share your bot token.</div>
     </section>
-          <section class="lifafa-card" id="lifafa-create-view" hidden>
-            <button class="back-button" id="back-from-create-lifafa" type="button">← Back</button>
-            <div class="section-head"><div><h2>🧧 Create Lifafa</h2><p>Amount is reserved from your CoinNest balance</p></div></div>
-            <form id="lifafa-form">
-              <label for="lifafa-title">Lifafa title</label><input id="lifafa-title" maxlength="100" placeholder="e.g. Special Giveaway" required>
-              <div class="lifafa-grid"><div><label for="lifafa-amount">Amount per user (₹)</label><input id="lifafa-amount" type="number" min="1" step="1" value="10" required></div><div><label for="lifafa-users">Total users</label><input id="lifafa-users" type="number" min="1" step="1" value="10" required></div></div>
-              <div class="helper" id="lifafa-total">Total cost: 10,000 coins</div>
-              <label for="lifafa-channels">Required channels (1–6, one per line)</label>
-              <textarea id="lifafa-channels" rows="4" placeholder="https://t.me/channelname (one link per line)" required></textarea>
-              <p class="smallprint">Add 1–6 public channel links, one per line. The bot must be an admin in every channel.</p>
-              <label for="lifafa-password">Password (optional)</label><input id="lifafa-password" maxlength="128" type="password" placeholder="Leave empty for no password">
-              <label class="check-row"><input id="lifafa-refer" type="checkbox"> Enable Refer & Earn</label>
-              <button class="primary full" id="lifafa-create" type="submit">Create Lifafa & Reserve Balance</button>
-            </form><div id="lifafa-result" class="result" hidden></div>
-          </section>
-    <section class="lifafa-card" id="lifafa-claim-card" hidden><h2 id="claim-lifafa-title">Lifafa</h2><p id="claim-lifafa-meta" class="smallprint"></p><div id="claim-lifafa-channels"></div><button class="primary full" id="claim-verify">Verify channels</button><div id="claim-password-wrap" hidden><label for="claim-password">Password</label><input id="claim-password" type="password" placeholder="Enter lifafa password"></div><button class="primary full" id="claim-lifafa-button">Claim Lifafa</button><div id="claim-lifafa-result" class="result" hidden></div></section>
   </main>
   <footer>CoinNest <span>•</span> Earn fairly, withdraw safely</footer>
 </div>
@@ -88,6 +85,7 @@
     <button id="verify-join" class="primary join-continue">◉ &nbsp; I’ve joined — continue</button>
   </section>
 </div>
+<div class="reward-dialog incorrect-dialog" role="dialog" aria-modal="true"><div class="reward-coin">❌</div><h2>Incorrect!</h2><p id="incorrect-message">That wasn't the right choice.</p><div class="reward-actions"><button id="incorrect-retry" class="reward-claim">Retry</button><button id="incorrect-cancel" class="reward-skip">Cancel</button></div></div></div>
 <div id="toast" class="toast" role="status"></div>
 <script>window.COINNEST_LIFAFA_ID = {{ lifafa_id|tojson }};</script><script src="/static/app.js"></script>
 </body></html>
