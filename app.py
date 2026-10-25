@@ -218,7 +218,7 @@ def require_user(fn):
                     conn.execute("INSERT OR IGNORE INTO referrals(referred_id, referrer_id, created_at) VALUES(?,?,?)",
                                  (user["telegram_id"], pending["referrer_id"], int(time.time())))
                 conn.execute("DELETE FROM pending_referrals WHERE referred_id=?", (user["telegram_id"],))
-        if request.path != "/api/join-status":
+        if request.path not in ("/api/join-status",) and not request.path.startswith("/api/lifafa/") and request.path != "/api/lifafas":
             missing = join_status(user["telegram_id"])
             if missing:
                 return jsonify({"error": "Join all required channels first.", "required_channels": missing}), 428
@@ -237,8 +237,9 @@ def telegram_send_message(text):
     return True
 
 @app.get("/")
-def index():
-    return render_template("index.html", bot_username=BOT_USERNAME, demo_mode=DEMO_MODE)
+@app.get("/lifafa/<lifafa_id>")
+def index(lifafa_id=None):
+    return render_template("index.html", bot_username=BOT_USERNAME, demo_mode=DEMO_MODE, lifafa_id=lifafa_id or "")
 
 @app.get("/api/config")
 def config():
@@ -253,8 +254,9 @@ def me():
         row = conn.execute("SELECT balance FROM users WHERE telegram_id=?", (user["telegram_id"],)).fetchone()
         history = conn.execute("SELECT id, amount_rupees, amount_coins, upi_id, status, created_at, method, payout_id, amount_value FROM withdrawals WHERE telegram_id=? ORDER BY id DESC LIMIT 10",
                                (user["telegram_id"],)).fetchall()
+        transactions = conn.execute("SELECT id, delta_coins, reason, reference_id, created_at FROM wallet_transactions WHERE telegram_id=? ORDER BY id DESC LIMIT 100", (user["telegram_id"],)).fetchall()
     return jsonify({"user": user, "balance": row["balance"],
-                    "withdrawals": [dict(x) for x in history]})
+                    "withdrawals": [dict(x) for x in history], "transactions": [dict(x) for x in transactions]})
 
 @app.post("/api/withdraw")
 @require_user
@@ -298,6 +300,7 @@ def withdraw():
             (user["telegram_id"], amount_rupees, coins, payout_id, now, method, payout_id, amount_value))
         withdrawal_id=cur.fetchone()["id"]
         conn.execute("UPDATE users SET balance=balance-? WHERE telegram_id=?", (coins, user["telegram_id"]))
+        conn.execute("INSERT INTO wallet_transactions(telegram_id,delta_coins,reason,reference_id,created_at) VALUES(?,?,?,?,?)", (user["telegram_id"], -coins, "Withdrawal requested", str(withdrawal_id), now))
         conn.commit()
     safe_name=f"{user.get('first_name','')} {user.get('last_name','')}".strip() or "Unknown"
     safe_username=user.get("username") or "not_set"
@@ -312,6 +315,7 @@ def withdraw():
         with db() as conn:
             conn.execute("UPDATE users SET balance=balance+? WHERE telegram_id=?", (coins, user["telegram_id"]))
             conn.execute("UPDATE withdrawals SET status='notification_failed' WHERE id=?", (withdrawal_id,))
+            conn.execute("INSERT INTO wallet_transactions(telegram_id,delta_coins,reason,reference_id,created_at) VALUES(?,?,?,?,?)", (user["telegram_id"], coins, "Withdrawal refund", str(withdrawal_id), int(time.time())))
         app.logger.exception("Withdrawal channel notification failed")
         return jsonify({"error": "Could not send request to the Telegram channel. Coins have been returned. Check bot permissions and server configuration."}), 502
     return jsonify({"ok": True, "message": f"Withdrawal request #{withdrawal_id} sent for manual review."})
@@ -409,6 +413,8 @@ def admin_balance():
         conn.execute("UPDATE users SET balance=balance+? WHERE telegram_id=?", (delta, target))
         conn.execute("INSERT INTO balance_logs(target_id, admin_id, delta, note, created_at) VALUES(?,?,?,?,?)",
                      (target, actor, delta, str(data.get("note", "admin adjustment"))[:200], now))
+        conn.execute("INSERT INTO wallet_transactions(telegram_id,delta_coins,reason,reference_id,created_at) VALUES(?,?,?,?,?)",
+                     (target, delta, "Admin balance adjustment", "admin:"+actor, now))
         conn.commit()
     return jsonify({"ok": True, "new_balance": row["balance"] + delta})
 
@@ -553,6 +559,99 @@ def telegram_webhook():
 @app.get("/adminpanel")
 def adminpanel():
     return render_template("admin.html", bot_username=BOT_USERNAME)
+
+def _telegram_member(channel_id, telegram_id):
+    if not BOT_TOKEN:
+        return False
+    try:
+        r = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getChatMember", params={"chat_id": channel_id, "user_id": telegram_id}, timeout=10)
+        data = r.json(); member = data.get("result", {}); status = member.get("status", "")
+        return bool(data.get("ok") and (status in ("creator", "administrator", "member") or (status == "restricted" and member.get("is_member", False))))
+    except requests.RequestException:
+        return False
+
+@app.post("/api/lifafas")
+@require_user
+def create_lifafa():
+    user=request.user_data; data=request.get_json(silent=True) or {}
+    title=str(data.get("title", "")).strip()[:100]
+    try: amount_rupees=int(data.get("amount_per_user", 0)); slots=int(data.get("total_users", 0))
+    except (TypeError, ValueError): return jsonify({"error":"Enter a valid amount and user count."}),400
+    channels=data.get("channels", [])
+    password=str(data.get("password", ""))[:128]
+    if not title: return jsonify({"error":"Lifafa title is required."}),400
+    if amount_rupees < 1 or amount_rupees > 100000 or slots < 1 or slots > 100000: return jsonify({"error":"Amount and total users must be positive and within limits."}),400
+    if not isinstance(channels,list) or not 1 <= len(channels) <= 6: return jsonify({"error":"Add between 1 and 6 required channels."}),400
+    clean=[]; seen=set()
+    for ch in channels:
+        cid=str((ch or {}).get("channel_id", "")).strip(); url=str((ch or {}).get("join_url", "")).strip()
+        if not cid or not url.startswith("https://t.me/"): return jsonify({"error":"Each channel needs a valid channel ID and Telegram invite link."}),400
+        if cid in seen: continue
+        seen.add(cid)
+        try:
+            check=requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getChatMember",params={"chat_id":cid,"user_id":(requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getMe",timeout=10).json().get("result") or {}).get("id")},timeout=10).json()
+        except requests.RequestException: check={}
+        if not check.get("ok") or check.get("result",{}).get("status") not in ("administrator","creator"):
+            return jsonify({"error":f"First make bot admin in {cid} and try again."}),400
+        clean.append({"channel_id":cid,"join_url":url,"title":str(ch.get("title") or cid)[:120]})
+    if not 1 <= len(clean) <= 6: return jsonify({"error":"Add between 1 and 6 unique channels."}),400
+    total_coins=amount_rupees*COINS_PER_RUPEE*slots; now=int(time.time()); lid=uuid.uuid4().hex[:16]
+    password_hash=hashlib.sha256(password.encode()).hexdigest() if password else ""
+    with db() as conn:
+        conn.execute("BEGIN")
+        wallet=conn.execute("SELECT balance FROM users WHERE telegram_id=? FOR UPDATE",(user["telegram_id"],)).fetchone()
+        if not wallet or int(wallet["balance"]) < total_coins:
+            conn.rollback(); return jsonify({"error":f"Insufficient balance. This lifafa needs {total_coins:,} coins."}),400
+        conn.execute("UPDATE users SET balance=balance-? WHERE telegram_id=?",(total_coins,user["telegram_id"]))
+        conn.execute("INSERT INTO lifafas(id,creator_id,title,amount_per_user_coins,total_slots,remaining_slots,reserved_coins,channels_json,password_hash,refer_enabled,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (lid,user["telegram_id"],title,amount_rupees*COINS_PER_RUPEE,slots,slots,total_coins,json.dumps(clean),password_hash,bool(data.get("refer_enabled")),"active",now))
+        conn.execute("INSERT INTO wallet_transactions(telegram_id,delta_coins,reason,reference_id,created_at) VALUES(?,?,?,?,?)",(user["telegram_id"],-total_coins,"Lifafa created: "+title,lid,now))
+        conn.commit()
+    return jsonify({"ok":True,"lifafa_id":lid,"share_url":PUBLIC_URL+"/lifafa/"+lid,"reserved_coins":total_coins,"balance_after":int(wallet["balance"])-total_coins})
+
+@app.get("/api/lifafa/<lifafa_id>")
+@require_user
+def lifafa_details(lifafa_id):
+    with db() as conn:
+        row=conn.execute("SELECT id,title,amount_per_user_coins,total_slots,remaining_slots,channels_json,password_hash,status,creator_id FROM lifafas WHERE id=?",(lifafa_id,)).fetchone()
+        if not row: return jsonify({"error":"Lifafa not found."}),404
+        channels=json.loads(row["channels_json"])
+        joined=[dict(ch,joined=_telegram_member(ch["channel_id"],request.user_data["telegram_id"])) for ch in channels]
+    return jsonify({"id":row["id"],"title":row["title"],"amount_coins":row["amount_per_user_coins"],"remaining_slots":row["remaining_slots"],"total_slots":row["total_slots"],"requires_password":bool(row["password_hash"]),"channels":joined,"status":row["status"]})
+
+@app.post("/api/lifafa/<lifafa_id>/claim")
+@require_user
+def claim_lifafa(lifafa_id):
+    user=request.user_data; data=request.get_json(silent=True) or {}; password=str(data.get("password", ""))[:128]; now=int(time.time())
+    with db() as conn:
+        conn.execute("BEGIN")
+        lf=conn.execute("SELECT * FROM lifafas WHERE id=? FOR UPDATE",(lifafa_id,)).fetchone()
+        if not lf: conn.rollback(); return jsonify({"error":"Lifafa not found."}),404
+        if lf["status"]!="active" or int(lf["remaining_slots"])<=0 or int(lf["reserved_coins"])<int(lf["amount_per_user_coins"]):
+            conn.rollback(); return jsonify({"error":"This lifafa is full or no longer active."}),409
+        if conn.execute("SELECT 1 FROM lifafa_claims WHERE lifafa_id=? AND telegram_id=?",(lifafa_id,user["telegram_id"])).fetchone():
+            conn.rollback(); return jsonify({"error":"You have already claimed this lifafa."}),409
+        if lf["password_hash"] and not hmac.compare_digest(hashlib.sha256(password.encode()).hexdigest(),lf["password_hash"]):
+            conn.rollback(); return jsonify({"error":"Incorrect lifafa password."}),403
+        channels=json.loads(lf["channels_json"])
+        missing=[ch for ch in channels if not _telegram_member(ch["channel_id"],user["telegram_id"])]
+        if missing:
+            conn.rollback(); return jsonify({"error":"Join all required channels first.","required_channels":missing}),428
+        reward=int(lf["amount_per_user_coins"])
+        conn.execute("INSERT INTO lifafa_claims(lifafa_id,telegram_id,amount_coins,created_at) VALUES(?,?,?,?)",(lifafa_id,user["telegram_id"],reward,now))
+        conn.execute("UPDATE users SET balance=balance+? WHERE telegram_id=?",(reward,user["telegram_id"]))
+        remaining=int(lf["remaining_slots"])-1; reserved=int(lf["reserved_coins"])-reward
+        conn.execute("UPDATE lifafas SET remaining_slots=?,reserved_coins=?,status=? WHERE id=?",(remaining,reserved,"completed" if remaining==0 else "active",lifafa_id))
+        conn.execute("INSERT INTO wallet_transactions(telegram_id,delta_coins,reason,reference_id,created_at) VALUES(?,?,?,?,?)",(user["telegram_id"],reward,"Lifafa claimed: "+lf["title"],lifafa_id,now))
+        conn.commit()
+    return jsonify({"ok":True,"coins_added":reward,"remaining_slots":remaining,"message":f"Claim successful! {reward:,} coins added to your wallet."})
+
+@app.get("/api/wallet/history")
+@require_user
+def wallet_history():
+    with db() as conn:
+        rows=conn.execute("SELECT id,delta_coins,reason,reference_id,created_at FROM wallet_transactions WHERE telegram_id=? ORDER BY id DESC LIMIT 100",(request.user_data["telegram_id"],)).fetchall()
+    return jsonify({"transactions":[dict(x) for x in rows]})
 
 @app.get("/health")
 def health():
