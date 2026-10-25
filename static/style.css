@@ -101,3 +101,14 @@ body.lifafa-create-mode #lifafa-create-view .section-head{margin-top:4px}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
 @keyframes cnHomeEnter{from{opacity:.7;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}
 .cn-home-enter{animation:cnHomeEnter .3s ease-out both}
+
+/* Dedicated Lifafa claim screen and framed home action area */
+#panel-home{min-height:calc(100vh - 220px);position:relative;padding-bottom:110px}
+.home-create-lifafa{min-height:118px;border-radius:24px;font-size:19px;font-weight:800;white-space:normal;display:flex;align-items:center;justify-content:center;margin-top:28px;box-shadow:0 0 24px rgba(0,216,255,.28),inset 0 0 0 1px rgba(255,255,255,.18)}
+#panel-home:after{content:"CoinNest  •  Earn fairly, withdraw safely";display:block;text-align:center;color:#7184a7;font-size:12px;margin-top:28px;padding:0 10px}
+body.lifafa-claim-mode .app>header,body.lifafa-claim-mode .app>.neon-tabs,body.lifafa-claim-mode .app>main>.panel,body.lifafa-claim-mode .app>footer{display:none!important}
+body.lifafa-claim-mode .app{min-height:100vh;padding-top:18px}
+body.lifafa-claim-mode .app>main{display:block}
+body.lifafa-claim-mode #lifafa-claim-card{display:block!important;margin:0;padding:20px;border-radius:20px;animation:cnScreenIn .38s cubic-bezier(.2,.75,.25,1) both}
+body.lifafa-claim-mode #lifafa-claim-card[hidden]{display:block!important}
+#lifafa-claim-card h2{font:800 22px Manrope;color:#ecfbff;margin:0 0 12px}
