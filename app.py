@@ -1,4 +1,4 @@
-import os, json, hmac, hashlib, time, uuid
+import os, json, hmac, hashlib, time, uuid, re
 from urllib.parse import parse_qsl
 from functools import wraps
 import requests
@@ -565,8 +565,9 @@ def telegram_webhook():
     command = text.split()[0].split("@", 1)[0].lower()
     if command == "/start":
         parts = text.split(maxsplit=1)
-        if len(parts) > 1 and parts[1].startswith("ref_"):
-            referrer_id = parts[1][4:].strip()
+        start_payload = parts[1].strip() if len(parts) > 1 else ""
+        if start_payload.startswith("ref_"):
+            referrer_id = start_payload[4:].strip()
             if referrer_id.isdigit() and referrer_id != sender_id and sender_id.isdigit():
                 with db() as conn:
                     existing_user = conn.execute("SELECT 1 FROM users WHERE telegram_id=?", (sender_id,)).fetchone()
@@ -574,9 +575,14 @@ def telegram_webhook():
                     if not existing_user and not existing_ref:
                         conn.execute("INSERT OR IGNORE INTO pending_referrals(referred_id, referrer_id, created_at) VALUES(?,?,?)",
                                      (sender_id, referrer_id, int(time.time())))
-        keyboard = [[{"text": "🪙 Open CoinNest", "web_app": {"url": PUBLIC_URL + "/"}}]]
+        lifafa_id = start_payload[7:] if start_payload.startswith("lifafa_") else ""
+        if lifafa_id and not re.fullmatch(r"[a-fA-F0-9]{8,32}", lifafa_id):
+            lifafa_id = ""
+        webapp_url = PUBLIC_URL + ("/lifafa/" + lifafa_id if lifafa_id else "/")
+        keyboard = [[{"text": "🧧 Open Lifafa" if lifafa_id else "🪙 Open CoinNest", "web_app": {"url": webapp_url}}]]
         send_bot_reply(chat_id,
-                       "Welcome to CoinNest! 🪙\nOpen the Mini App below to view your rewards and wallet.",
+                       ("🧧 Someone shared a CoinNest Lifafa with you!\\nTap below to open it inside Telegram." if lifafa_id else
+                        "Welcome to CoinNest! 🪙\\nOpen the Mini App below to view your rewards and wallet."),
                        keyboard)
     elif command == "/adminpanel":
         if sender_id != OWNER_ADMIN_ID:
@@ -615,16 +621,44 @@ def create_lifafa():
     if not isinstance(channels,list) or not 1 <= len(channels) <= 6: return jsonify({"error":"Add between 1 and 6 required channels."}),400
     clean=[]; seen=set()
     for ch in channels:
-        cid=str((ch or {}).get("channel_id", "")).strip(); url=str((ch or {}).get("join_url", "")).strip()
-        if not cid or not url.startswith("https://t.me/"): return jsonify({"error":"Each channel needs a valid channel ID and Telegram invite link."}),400
+        ch = ch or {}
+        cid=str(ch.get("channel_id", "")).strip()
+        url=str(ch.get("join_url", "")).strip()
+        raw=str(ch.get("channel", "")).strip()
+        if raw and not cid and not url:
+            if raw.startswith("@"):
+                cid=raw; url="https://t.me/"+raw.lstrip("@")
+            elif raw.startswith("https://t.me/"):
+                slug=raw.split("t.me/",1)[1].strip("/").split("?",1)[0]
+                if slug and not slug.startswith("+") and slug != "joinchat":
+                    cid="@"+slug; url="https://t.me/"+slug
+        if not cid and url.startswith("https://t.me/"):
+            slug=url.split("t.me/",1)[1].strip("/").split("?",1)[0]
+            if slug and not slug.startswith("+") and slug != "joinchat":
+                cid="@"+slug
+        if not cid:
+            return jsonify({"error":"Paste a public channel link like https://t.me/channelname. Private invite links need a channel ID too."}),400
+        if not url:
+            if cid.startswith("@"): url="https://t.me/"+cid.lstrip("@")
+            else: return jsonify({"error":"For a numeric/private channel ID, provide its Telegram invite link."}),400
+        if not url.startswith("https://t.me/"):
+            return jsonify({"error":"Channel link must start with https://t.me/"}),400
         if cid in seen: continue
         seen.add(cid)
         try:
-            check=requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getChatMember",params={"chat_id":cid,"user_id":(requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getMe",timeout=10).json().get("result") or {}).get("id")},timeout=10).json()
-        except requests.RequestException: check={}
+            chat_data=requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getChat",params={"chat_id":cid},timeout=10).json()
+            if not chat_data.get("ok"):
+                return jsonify({"error":f"Could not find {cid}. Check the public channel link and bot access."}),400
+            resolved_id=str(chat_data["result"]["id"])
+            title=str(ch.get("title") or chat_data["result"].get("title") or cid)[:120]
+            bot_data=requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getMe",timeout=10).json()
+            bot_id=(bot_data.get("result") or {}).get("id")
+            check=requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getChatMember",params={"chat_id":resolved_id,"user_id":bot_id},timeout=10).json()
+        except (requests.RequestException, ValueError):
+            return jsonify({"error":"Could not check the channel with Telegram right now. Try again."}),502
         if not check.get("ok") or check.get("result",{}).get("status") not in ("administrator","creator"):
-            return jsonify({"error":f"First make bot admin in {cid} and try again."}),400
-        clean.append({"channel_id":cid,"join_url":url,"title":str(ch.get("title") or cid)[:120]})
+            return jsonify({"error":f"❌ First make bot admin in {title}."}),400
+        clean.append({"channel_id":resolved_id,"join_url":url,"title":title})
     if not 1 <= len(clean) <= 6: return jsonify({"error":"Add between 1 and 6 unique channels."}),400
     total_coins=amount_rupees*COINS_PER_RUPEE*slots; now=int(time.time()); lid=uuid.uuid4().hex[:16]
     password_hash=hashlib.sha256(password.encode()).hexdigest() if password else ""
@@ -638,7 +672,7 @@ def create_lifafa():
             (lid,user["telegram_id"],title,amount_rupees*COINS_PER_RUPEE,slots,slots,total_coins,json.dumps(clean),password_hash,bool(data.get("refer_enabled")),"active",now))
         conn.execute("INSERT INTO wallet_transactions(telegram_id,delta_coins,reason,reference_id,created_at) VALUES(?,?,?,?,?)",(user["telegram_id"],-total_coins,"Lifafa created: "+title,lid,now))
         conn.commit()
-    return jsonify({"ok":True,"lifafa_id":lid,"share_url":PUBLIC_URL+"/lifafa/"+lid,"reserved_coins":total_coins,"balance_after":int(wallet["balance"])-total_coins})
+    return jsonify({"ok":True,"lifafa_id":lid,"share_url":"https://t.me/"+BOT_USERNAME+"?start=lifafa_"+lid,"reserved_coins":total_coins,"balance_after":int(wallet["balance"])-total_coins})
 
 @app.get("/api/lifafa/<lifafa_id>")
 @require_user
