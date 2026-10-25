@@ -114,7 +114,10 @@ function openLifafaCreateView(){
   document.body.classList.add("lifafa-create-mode");
   document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
   $("lifafa-create-view").hidden=false;
-  $("lifafa-create-view").classList.add("lifafa-form-view");
+  const view=$("lifafa-create-view");
+  view.classList.remove("lifafa-form-view");
+  void view.offsetWidth; // restart entrance animation each time the screen opens
+  view.classList.add("lifafa-form-view");
   window.scrollTo({top:0,behavior:"instant"});
 }
 function closeLifafaCreateView(){
@@ -123,6 +126,8 @@ function closeLifafaCreateView(){
   $("lifafa-create-view").hidden=true;
   document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab==="home"));
   document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active",p.id==="panel-home"));
+  const home=document.querySelector("#panel-home .hero");
+  if(home){home.classList.remove("cn-home-enter");void home.offsetWidth;home.classList.add("cn-home-enter");}
   window.scrollTo({top:0,behavior:"instant"});
 }
 $("open-create-lifafa")?.addEventListener("click",openLifafaCreateView);
