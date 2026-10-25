@@ -1,4 +1,4 @@
-import os, json, hmac, hashlib, time, uuid
+import os, json, hmac, hashlib, time, uuid, re
 from urllib.parse import parse_qsl
 from functools import wraps
 import requests
@@ -7,15 +7,58 @@ from psycopg2.extras import RealDictCursor
 from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 64 * 1024  # reject oversized JSON bodies
+
+# Lightweight per-instance abuse throttle. Use a shared store/WAF for multi-instance production.
+_RATE_BUCKETS = {}
+_RATE_LIMITS = {"/api/lifafas": (8, 60), "/api/lifafa/": (30, 60)}
+@app.before_request
+def _basic_request_guards():
+    if request.method in ("POST", "PUT", "PATCH") and request.path.startswith("/api/"):
+        if request.content_length is not None and request.content_length > 64 * 1024:
+            return jsonify({"error": "Request body too large."}), 413
+        if request.mimetype != "application/json":
+            return jsonify({"error": "Content-Type must be application/json."}), 415
+    limit = next(((n, window) for prefix, (n, window) in _RATE_LIMITS.items() if request.path == prefix or request.path.startswith(prefix)), None)
+    if limit:
+        count, window = limit
+        now = time.time()
+        ip = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
+        key = (ip, request.path.split("/")[:4].__str__())
+        hits = [t for t in _RATE_BUCKETS.get(key, []) if now - t < window]
+        if len(hits) >= count:
+            return jsonify({"error": "Too many requests. Please wait and try again."}), 429
+        hits.append(now); _RATE_BUCKETS[key] = hits
+    return None
+
+@app.after_request
+def _security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; base-uri 'self'; object-src 'none'; "
+        "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org; "
+        "form-action 'self'; upgrade-insecure-requests; "
+        "script-src 'self' 'unsafe-inline' https://telegram.org https://*.telegram.org; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com data:; "
+        "img-src 'self' data: https:; connect-src 'self' https://api.telegram.org")
+    if request.is_secure:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "CoinNest_bot").strip().lstrip("@")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "").strip()
-DEMO_MODE = os.environ.get("DEMO_MODE", "1") == "1"
+DEMO_MODE = os.environ.get("DEMO_MODE", "0") == "1"
 COINS_PER_RUPEE = 100
 MIN_WITHDRAW_RUPEES = 10
 OWNER_ADMIN_ID = os.environ.get("OWNER_ADMIN_ID", "1849699189").strip()
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "https://coinnest-webapp.vercel.app").strip().rstrip("/")
+MINI_APP_SHORT_NAME = os.environ.get("MINI_APP_SHORT_NAME", "CoinNest").strip()
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "").strip()
 class DBConnection:
     """Small compatibility wrapper for the existing SQL call style, backed by PostgreSQL."""
@@ -607,11 +650,12 @@ def create_lifafa():
             (lid,user["telegram_id"],title,amount_rupees*COINS_PER_RUPEE,slots,slots,total_coins,json.dumps(clean),password_hash,bool(data.get("refer_enabled")),"active",now))
         conn.execute("INSERT INTO wallet_transactions(telegram_id,delta_coins,reason,reference_id,created_at) VALUES(?,?,?,?,?)",(user["telegram_id"],-total_coins,"Lifafa created: "+title,lid,now))
         conn.commit()
-    return jsonify({"ok":True,"lifafa_id":lid,"share_url":PUBLIC_URL+"/lifafa/"+lid,"reserved_coins":total_coins,"balance_after":int(wallet["balance"])-total_coins})
+    return jsonify({"ok":True,"lifafa_id":lid,"share_url":f"https://t.me/{BOT_USERNAME}/{MINI_APP_SHORT_NAME}?startapp=lifafa_{lid}","reserved_coins":total_coins,"balance_after":int(wallet["balance"])-total_coins})
 
 @app.get("/api/lifafa/<lifafa_id>")
 @require_user
 def lifafa_details(lifafa_id):
+    if not re.fullmatch(r"[a-f0-9]{16}", lifafa_id): return jsonify({"error":"Invalid Lifafa link."}), 400
     with db() as conn:
         row=conn.execute("SELECT id,title,amount_per_user_coins,total_slots,remaining_slots,channels_json,password_hash,status,creator_id FROM lifafas WHERE id=?",(lifafa_id,)).fetchone()
         if not row: return jsonify({"error":"Lifafa not found."}),404
@@ -622,6 +666,7 @@ def lifafa_details(lifafa_id):
 @app.post("/api/lifafa/<lifafa_id>/claim")
 @require_user
 def claim_lifafa(lifafa_id):
+    if not re.fullmatch(r"[a-f0-9]{16}", lifafa_id): return jsonify({"error":"Invalid Lifafa link."}), 400
     user=request.user_data; data=request.get_json(silent=True) or {}; password=str(data.get("password", ""))[:128]; now=int(time.time())
     with db() as conn:
         conn.execute("BEGIN")
