@@ -109,6 +109,26 @@ loadReferrals();
   }catch(e){toast(e.message)}
 })();
 
+// Lifafa form is a focused view inside this same Mini App/server.
+function openLifafaCreateView(){
+  document.body.classList.add("lifafa-create-mode");
+  document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
+  $("create-lifafa-card").hidden=false;
+  $("lifafa-claim-card").hidden=true;
+  $("create-lifafa-card").classList.add("lifafa-form-view");
+  window.scrollTo({top:0,behavior:"instant"});
+}
+function closeLifafaCreateView(){
+  document.body.classList.remove("lifafa-create-mode");
+  $("create-lifafa-card").classList.remove("lifafa-form-view");
+  $("create-lifafa-card").hidden=true;
+  document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab==="home"));
+  document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active",p.id==="panel-home"));
+  window.scrollTo({top:0,behavior:"instant"});
+}
+$("open-create-lifafa")?.addEventListener("click",openLifafaCreateView);
+$("back-from-create-lifafa")?.addEventListener("click",closeLifafaCreateView);
+
 // Lifafa creation, claim verification, and unified wallet ledger.
 function renderWalletTransactions(items){
  const el=$("wallet-transactions"); if(!el)return; el.innerHTML="";
@@ -120,9 +140,7 @@ const oldRefresh=refresh;
 refresh=async function(){try{state=await api("/api/me");render();renderWalletTransactions(state.transactions||[]);}catch(e){toast(e.message)}};
 function updateLifafaCost(){const a=Math.max(0,Number($("lifafa-amount")?.value)||0),n=Math.max(0,Number($("lifafa-users")?.value)||0);if($("lifafa-total"))$("lifafa-total").textContent=`Total cost: ${(a*n*100).toLocaleString("en-IN")} coins (₹${(a*n).toLocaleString("en-IN")})`;}
 $("lifafa-amount")?.addEventListener("input",updateLifafaCost);$("lifafa-users")?.addEventListener("input",updateLifafaCost);updateLifafaCost();
-function parseLifafaChannels(){return $("lifafa-channels").value.split("\n").map(x=>x.trim()).filter(Boolean).map(line=>({channel:line}));}
-$("open-create-lifafa")?.addEventListener("click",()=>{$("create-lifafa-card").hidden=false;$("open-create-lifafa").hidden=true;$("create-lifafa-card").scrollIntoView({behavior:"smooth",block:"start"});});
-$("close-create-lifafa")?.addEventListener("click",()=>{$("create-lifafa-card").hidden=true;$("open-create-lifafa").hidden=false;window.scrollTo({top:0,behavior:"smooth"});});
+function parseLifafaChannels(){return $("lifafa-channels").value.split("\n").map(x=>x.trim()).filter(Boolean).map(line=>{const parts=line.split("|").map(x=>x.trim());if(parts.length>1){const [channel_id,join_url,title]=parts;return {channel_id,join_url,title:title||channel_id};}const match=line.match(/^https?:\/\/t\.me\/([A-Za-z0-9_]{5,})(?:\/?(?:\?.*)?)?$/);if(!match)throw new Error("Enter a public Telegram channel link like https://t.me/channelname, one per line.");return {channel_id:"@"+match[1],join_url:"https://t.me/"+match[1],title:"@"+match[1]};});}
 $("lifafa-form")?.addEventListener("submit",async e=>{
  e.preventDefault();const btn=$("lifafa-create"),out=$("lifafa-result");btn.disabled=true;out.hidden=true;out.className="result";btn.textContent="Checking channels…";
  try{const payload={title:$("lifafa-title").value.trim(),amount_per_user:$("lifafa-amount").value,total_users:$("lifafa-users").value,channels:parseLifafaChannels(),password:$("lifafa-password").value,refer_enabled:$("lifafa-refer").checked};const d=await api("/api/lifafas",{method:"POST",body:JSON.stringify(payload)});out.innerHTML="";const msg=document.createElement("p");msg.textContent=`Lifafa created! Reserved ${Number(d.reserved_coins).toLocaleString("en-IN")} coins.`;const link=document.createElement("input");link.readOnly=true;link.value=d.share_url;const copy=document.createElement("button");copy.className="primary full";copy.textContent="Copy shareable link";copy.onclick=async()=>{try{await navigator.clipboard.writeText(d.share_url);toast("Lifafa link copied!")}catch{link.select();toast("Select and copy the link.")}};out.append(msg,link,copy);out.hidden=false;await refresh();$("lifafa-form").reset();updateLifafaCost();}
@@ -130,7 +148,7 @@ $("lifafa-form")?.addEventListener("submit",async e=>{
  finally{btn.disabled=false;btn.textContent="Create Lifafa & Reserve Balance";}
 });
 let claimLifafaId=window.COINNEST_LIFAFA_ID||"";
-async function loadLifafa(){if(!claimLifafaId)return;$("create-lifafa-card").hidden=true;$("lifafa-claim-card").hidden=false;try{const d=await api(`/api/lifafa/${encodeURIComponent(claimLifafaId)}`);$("claim-lifafa-title").textContent="🧧 "+d.title;$("claim-lifafa-meta").textContent=`Reward: ${Number(d.amount_coins).toLocaleString("en-IN")} coins (₹${(Number(d.amount_coins)/100).toFixed(2)}) · ${d.remaining_slots} of ${d.total_slots} slots left`;$("claim-password-wrap").hidden=!d.requires_password;const list=$("claim-lifafa-channels");list.innerHTML="";d.channels.forEach(ch=>{const row=document.createElement("div");row.className="channel-status";const name=document.createElement("span");name.textContent=ch.title||ch.channel_id;const status=document.createElement("b");status.textContent=ch.joined?"Joined ✅":"Not joined";const join=document.createElement("a");join.href=ch.join_url;join.target="_blank";join.rel="noopener";join.textContent=ch.joined?"":"JOIN";if(!ch.joined)join.addEventListener("click",ev=>{if(tg?.openTelegramLink){ev.preventDefault();tg.openTelegramLink(ch.join_url);}});row.append(name,status,join);list.append(row)});$("claim-lifafa-button").disabled=d.status!=="active"||d.remaining_slots<1;}
+async function loadLifafa(){if(!claimLifafaId)return;$("create-lifafa-card").hidden=true;$("lifafa-claim-card").hidden=false;try{const d=await api(`/api/lifafa/${encodeURIComponent(claimLifafaId)}`);$("claim-lifafa-title").textContent="🧧 "+d.title;$("claim-lifafa-meta").textContent=`Reward: ${Number(d.amount_coins).toLocaleString("en-IN")} coins (₹${(Number(d.amount_coins)/100).toFixed(2)}) · ${d.remaining_slots} of ${d.total_slots} slots left`;$("claim-password-wrap").hidden=!d.requires_password;const list=$("claim-lifafa-channels");list.innerHTML="";d.channels.forEach(ch=>{const row=document.createElement("div");row.className="channel-status";const name=document.createElement("span");name.textContent=ch.title||ch.channel_id;const status=document.createElement("b");status.textContent=ch.joined?"Joined ✅":"Not joined";const join=document.createElement("a");join.href=ch.join_url;join.target="_blank";join.rel="noopener";join.textContent=ch.joined?"":"JOIN";row.append(name,status,join);list.append(row)});$("claim-lifafa-button").disabled=d.status!=="active"||d.remaining_slots<1;}
  catch(e){$("claim-lifafa-result").textContent=e.message;$("claim-lifafa-result").className="result error";$("claim-lifafa-result").hidden=false;}}
 $("claim-verify")?.addEventListener("click",loadLifafa);
 $("claim-lifafa-button")?.addEventListener("click",async()=>{const out=$("claim-lifafa-result"),btn=$("claim-lifafa-button");btn.disabled=true;out.hidden=true;try{const d=await api(`/api/lifafa/${encodeURIComponent(claimLifafaId)}/claim`,{method:"POST",body:JSON.stringify({password:$("claim-password").value})});out.textContent=d.message;out.className="result";out.hidden=false;await refresh();await loadLifafa();}catch(e){out.textContent=e.message;out.className="result error";out.hidden=false;try{await loadLifafa()}catch{}}finally{btn.disabled=false;}});
