@@ -15,7 +15,7 @@ DEMO_MODE = os.environ.get("DEMO_MODE", "1") == "1"
 COINS_PER_RUPEE = 100
 MIN_WITHDRAW_RUPEES = 10
 OWNER_ADMIN_ID = os.environ.get("OWNER_ADMIN_ID", "1849699189").strip()
-PUBLIC_URL = os.environ.get("PUBLIC_URL", "https://coinnest-webapp.onrender.com").strip().rstrip("/")
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "https://coinnest-webapp.vercel.app").strip().rstrip("/")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "").strip()
 class DBConnection:
     """Small compatibility wrapper for the existing SQL call style, backed by PostgreSQL."""
