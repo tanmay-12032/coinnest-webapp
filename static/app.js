@@ -109,19 +109,18 @@ loadReferrals();
   }catch(e){toast(e.message)}
 })();
 
-// Lifafa form is a focused view inside this same Mini App/server.
+// Lifafa form is an independent full-screen view, outside the wallet/profile panel.
 function openLifafaCreateView(){
   document.body.classList.add("lifafa-create-mode");
   document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
-  $("create-lifafa-card").hidden=false;
-  $("lifafa-claim-card").hidden=true;
-  $("create-lifafa-card").classList.add("lifafa-form-view");
+  $("lifafa-create-view").hidden=false;
+  $("lifafa-create-view").classList.add("lifafa-form-view");
   window.scrollTo({top:0,behavior:"instant"});
 }
 function closeLifafaCreateView(){
   document.body.classList.remove("lifafa-create-mode");
-  $("create-lifafa-card").classList.remove("lifafa-form-view");
-  $("create-lifafa-card").hidden=true;
+  $("lifafa-create-view").classList.remove("lifafa-form-view");
+  $("lifafa-create-view").hidden=true;
   document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab==="home"));
   document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active",p.id==="panel-home"));
   window.scrollTo({top:0,behavior:"instant"});
@@ -148,7 +147,7 @@ $("lifafa-form")?.addEventListener("submit",async e=>{
  finally{btn.disabled=false;btn.textContent="Create Lifafa & Reserve Balance";}
 });
 let claimLifafaId=window.COINNEST_LIFAFA_ID||"";
-async function loadLifafa(){if(!claimLifafaId)return;$("create-lifafa-card").hidden=true;$("lifafa-claim-card").hidden=false;try{const d=await api(`/api/lifafa/${encodeURIComponent(claimLifafaId)}`);$("claim-lifafa-title").textContent="🧧 "+d.title;$("claim-lifafa-meta").textContent=`Reward: ${Number(d.amount_coins).toLocaleString("en-IN")} coins (₹${(Number(d.amount_coins)/100).toFixed(2)}) · ${d.remaining_slots} of ${d.total_slots} slots left`;$("claim-password-wrap").hidden=!d.requires_password;const list=$("claim-lifafa-channels");list.innerHTML="";d.channels.forEach(ch=>{const row=document.createElement("div");row.className="channel-status";const name=document.createElement("span");name.textContent=ch.title||ch.channel_id;const status=document.createElement("b");status.textContent=ch.joined?"Joined ✅":"Not joined";const join=document.createElement("a");join.href=ch.join_url;join.target="_blank";join.rel="noopener";join.textContent=ch.joined?"":"JOIN";row.append(name,status,join);list.append(row)});$("claim-lifafa-button").disabled=d.status!=="active"||d.remaining_slots<1;}
+async function loadLifafa(){if(!claimLifafaId)return;$("lifafa-create-view").hidden=true;$("lifafa-claim-card").hidden=false;try{const d=await api(`/api/lifafa/${encodeURIComponent(claimLifafaId)}`);$("claim-lifafa-title").textContent="🧧 "+d.title;$("claim-lifafa-meta").textContent=`Reward: ${Number(d.amount_coins).toLocaleString("en-IN")} coins (₹${(Number(d.amount_coins)/100).toFixed(2)}) · ${d.remaining_slots} of ${d.total_slots} slots left`;$("claim-password-wrap").hidden=!d.requires_password;const list=$("claim-lifafa-channels");list.innerHTML="";d.channels.forEach(ch=>{const row=document.createElement("div");row.className="channel-status";const name=document.createElement("span");name.textContent=ch.title||ch.channel_id;const status=document.createElement("b");status.textContent=ch.joined?"Joined ✅":"Not joined";const join=document.createElement("a");join.href=ch.join_url;join.target="_blank";join.rel="noopener";join.textContent=ch.joined?"":"JOIN";row.append(name,status,join);list.append(row)});$("claim-lifafa-button").disabled=d.status!=="active"||d.remaining_slots<1;}
  catch(e){$("claim-lifafa-result").textContent=e.message;$("claim-lifafa-result").className="result error";$("claim-lifafa-result").hidden=false;}}
 $("claim-verify")?.addEventListener("click",loadLifafa);
 $("claim-lifafa-button")?.addEventListener("click",async()=>{const out=$("claim-lifafa-result"),btn=$("claim-lifafa-button");btn.disabled=true;out.hidden=true;try{const d=await api(`/api/lifafa/${encodeURIComponent(claimLifafaId)}/claim`,{method:"POST",body:JSON.stringify({password:$("claim-password").value})});out.textContent=d.message;out.className="result";out.hidden=false;await refresh();await loadLifafa();}catch(e){out.textContent=e.message;out.className="result error";out.hidden=false;try{await loadLifafa()}catch{}}finally{btn.disabled=false;}});

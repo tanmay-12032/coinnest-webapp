@@ -76,7 +76,6 @@ body { padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px)) !important
 body.lifafa-create-mode .app>header,body.lifafa-create-mode .app>.neon-tabs,body.lifafa-create-mode .app>main>.panel,body.lifafa-create-mode .app>footer{display:none!important}
 body.lifafa-create-mode .app{min-height:100vh;padding-top:18px}
 body.lifafa-create-mode .app>main{display:block}
-body.lifafa-create-mode #panel-profile{display:block!important}
-body.lifafa-create-mode #create-lifafa-card{display:block!important;margin:0;padding:18px;border-radius:18px}
-body.lifafa-create-mode #create-lifafa-card[hidden]{display:block!important}
-body.lifafa-create-mode #create-lifafa-card .section-head{margin-top:4px}
+body.lifafa-create-mode #lifafa-create-view{display:block!important;margin:0;padding:18px;border-radius:18px}
+body.lifafa-create-mode #lifafa-create-view[hidden]{display:block!important}
+body.lifafa-create-mode #lifafa-create-view .section-head{margin-top:4px}
