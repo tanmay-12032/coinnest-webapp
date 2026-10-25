@@ -92,6 +92,37 @@ def init_db():
         conn.execute("""CREATE TABLE IF NOT EXISTS balance_logs (
             id BIGSERIAL PRIMARY KEY, target_id TEXT NOT NULL, admin_id TEXT NOT NULL,
             delta INTEGER NOT NULL, note TEXT NOT NULL, created_at INTEGER NOT NULL)""")
+        # Wallet ledger used by /api/me, /api/wallet/history, withdrawals and lifafa rewards.
+        conn.execute("""CREATE TABLE IF NOT EXISTS wallet_transactions (
+            id BIGSERIAL PRIMARY KEY,
+            telegram_id TEXT NOT NULL,
+            delta_coins BIGINT NOT NULL,
+            reason TEXT NOT NULL,
+            reference_id TEXT NOT NULL DEFAULT '',
+            created_at BIGINT NOT NULL)""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_wallet_transactions_user_time ON wallet_transactions(telegram_id, created_at DESC)")
+        # Lifafa tables. These are additive and do not alter existing user balances/history.
+        conn.execute("""CREATE TABLE IF NOT EXISTS lifafas (
+            id TEXT PRIMARY KEY,
+            creator_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            amount_per_user_coins BIGINT NOT NULL,
+            total_slots INTEGER NOT NULL,
+            remaining_slots INTEGER NOT NULL,
+            reserved_coins BIGINT NOT NULL,
+            channels_json TEXT NOT NULL,
+            password_hash TEXT NOT NULL DEFAULT '',
+            refer_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at BIGINT NOT NULL)""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS lifafa_claims (
+            id BIGSERIAL PRIMARY KEY,
+            lifafa_id TEXT NOT NULL REFERENCES lifafas(id),
+            telegram_id TEXT NOT NULL,
+            amount_coins BIGINT NOT NULL,
+            created_at BIGINT NOT NULL,
+            UNIQUE (lifafa_id, telegram_id))""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_lifafa_claims_user_time ON lifafa_claims(telegram_id, created_at DESC)")
         conn.execute("""CREATE TABLE IF NOT EXISTS pending_referrals (
             referred_id TEXT PRIMARY KEY, referrer_id TEXT NOT NULL, created_at INTEGER NOT NULL)""")
         conn.execute("""CREATE TABLE IF NOT EXISTS referrals (
